@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { getMakes, getModels, getTrims, getYears, MakeInfo, TrimInfo } from '../api/vehicles';
 import { Button, Card, Field, SelectField } from '../components/ui';
 import { colors, spacing } from '../theme';
 import { Vehicle } from '../types';
 
-export default function VehicleSetup({ onDone }: { onDone: (v: Vehicle) => void }) {
+export default function VehicleSetup({
+  onDone,
+  onCancel,
+}: {
+  onDone: (v: Vehicle) => void;
+  onCancel?: () => void;
+}) {
   const years = useMemo(() => getYears().map(String), []);
   const [year, setYear] = useState<string | null>(null);
   const [make, setMake] = useState<string | null>(null);
@@ -86,7 +92,12 @@ export default function VehicleSetup({ onDone }: { onDone: (v: Vehicle) => void 
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.md, paddingTop: 64 }}>
+    <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.md, paddingTop: 56 }}>
+      {onCancel && (
+        <Pressable onPress={onCancel} hitSlop={8} style={{ marginBottom: spacing.sm }}>
+          <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>‹ Garage</Text>
+        </Pressable>
+      )}
       <Text style={styles.h1}>🚗 Your vehicle</Text>
       <Text style={styles.sub}>
         Pick your exact car — we use it to build your maintenance schedule.

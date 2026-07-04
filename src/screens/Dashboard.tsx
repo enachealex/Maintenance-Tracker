@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -8,64 +8,89 @@ import {
   Text,
   View,
 } from 'react-native';
-import { computeTasks, fmtMiles } from '../logic';
+import { computeTasks, fmtMiles, vehicleName } from '../logic';
+import { CADENCE_OPTIONS, cadenceLabel, daysSinceMileageUpdate, isMileageStale } from '../cadence';
 import { Button, Card, Field } from '../components/ui';
 import { colors, spacing } from '../theme';
-import { AppData, ComputedTask } from '../types';
+import { ComputedTask, MileageCadence, VehicleRecord } from '../types';
 
 export default function Dashboard({
-  data,
+  rec,
+  startEditingMileage,
   onCompleteTask,
   onUpdateMileage,
-  onChangeVehicle,
+  onSetCadence,
+  onBack,
+  onRemove,
 }: {
-  data: AppData;
+  rec: VehicleRecord;
+  startEditingMileage?: boolean;
   onCompleteTask: (itemId: string) => void;
   onUpdateMileage: (mileage: number) => void;
-  onChangeVehicle: () => void;
+  onSetCadence: (cadence: MileageCadence, customDays: number) => void;
+  onBack: () => void;
+  onRemove: () => void;
 }) {
-  const tasks = useMemo(() => computeTasks(data), [data]);
+  const tasks = useMemo(() => computeTasks(rec), [rec]);
   const overdue = tasks.filter((t) => t.status === 'overdue');
   const dueSoon = tasks.filter((t) => t.status === 'due-soon');
   const upcoming = tasks.filter((t) => t.status === 'ok');
 
-  const [editingMileage, setEditingMileage] = useState(false);
+  const [editingMileage, setEditingMileage] = useState(!!startEditingMileage);
   const [mileageText, setMileageText] = useState('');
+  const [customDaysText, setCustomDaysText] = useState(String(rec.mileageCustomDays));
 
-  const v = data.vehicle!;
-
-  const confirmComplete = (task: ComputedTask) => {
-    const doIt = () => onCompleteTask(task.item.id);
-    if (Platform.OS === 'web') {
-      // Alert with buttons isn't supported on web
-      if (window.confirm(`Mark "${task.item.name}" as done at ${fmtMiles(data.currentMileage)}?`)) doIt();
-    } else {
-      Alert.alert(
-        'Mark complete',
-        `Mark "${task.item.name}" as done at ${fmtMiles(data.currentMileage)}? Its weekly reminder will stop.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Done ✓', onPress: doIt },
-        ],
-      );
+  useEffect(() => {
+    if (startEditingMileage) {
+      setMileageText('');
+      setEditingMileage(true);
     }
+  }, [startEditingMileage]);
+
+  const v = rec.vehicle;
+  const stale = isMileageStale(rec);
+
+  const confirm = (title: string, message: string, onYes: () => void, destructive = false) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}\n\n${message}`)) onYes();
+    } else {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: destructive ? 'Remove' : 'Done ✓', style: destructive ? 'destructive' : 'default', onPress: onYes },
+      ]);
+    }
+  };
+
+  const confirmComplete = (task: ComputedTask) =>
+    confirm(
+      'Mark complete',
+      `Mark "${task.item.name}" as done at ${fmtMiles(rec.currentMileage)}? Its reminder will stop.`,
+      () => onCompleteTask(task.item.id),
+    );
+
+  const saveMileage = () => {
+    const m = parseInt(mileageText.replace(/[^0-9]/g, ''), 10);
+    if (m > 0) {
+      onUpdateMileage(m);
+      setEditingMileage(false);
+    }
+  };
+
+  const chooseCadence = (cadence: MileageCadence) => {
+    const days = parseInt(customDaysText.replace(/[^0-9]/g, ''), 10) || rec.mileageCustomDays;
+    onSetCadence(cadence, days);
   };
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.h1}>
-            {v.year} {v.make} {v.model}
-          </Text>
-          <Text style={styles.sub}>
-            {v.trim} · {v.engine}
-          </Text>
-        </View>
-        <Pressable onPress={onChangeVehicle} hitSlop={8}>
-          <Text style={{ color: colors.accent, fontSize: 13 }}>Change</Text>
-        </Pressable>
-      </View>
+      <Pressable onPress={onBack} hitSlop={8} style={styles.backRow}>
+        <Text style={styles.back}>‹ Garage</Text>
+      </Pressable>
+
+      <Text style={styles.h1}>{vehicleName(rec)}</Text>
+      <Text style={styles.sub}>
+        {v.trim} · {v.engine}
+      </Text>
 
       <Card style={styles.mileageCard}>
         {editingMileage ? (
@@ -74,7 +99,7 @@ export default function Dashboard({
               label="New odometer reading"
               value={mileageText}
               onChangeText={setMileageText}
-              placeholder={String(data.currentMileage)}
+              placeholder={String(rec.currentMileage)}
               keyboardType="numeric"
             />
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -82,28 +107,24 @@ export default function Dashboard({
                 <Button title="Cancel" variant="ghost" onPress={() => setEditingMileage(false)} />
               </View>
               <View style={{ flex: 1 }}>
-                <Button
-                  title="Save"
-                  onPress={() => {
-                    const m = parseInt(mileageText.replace(/[^0-9]/g, ''), 10);
-                    if (m > 0) {
-                      onUpdateMileage(m);
-                      setEditingMileage(false);
-                    }
-                  }}
-                />
+                <Button title="Save" onPress={saveMileage} />
               </View>
             </View>
           </>
         ) : (
           <View style={styles.mileageRow}>
             <View>
-              <Text style={styles.mileageValue}>{data.currentMileage.toLocaleString()} mi</Text>
-              <Text style={styles.sub}>current mileage</Text>
+              <Text style={styles.mileageValue}>{rec.currentMileage.toLocaleString()} mi</Text>
+              <Text style={styles.sub}>
+                current mileage
+                {rec.mileageUpdatedAt
+                  ? ` · updated ${daysSinceMileageUpdate(rec)}d ago`
+                  : ''}
+              </Text>
             </View>
             <Button
               title="Update"
-              variant="ghost"
+              variant={stale ? 'primary' : 'ghost'}
               onPress={() => {
                 setMileageText('');
                 setEditingMileage(true);
@@ -111,6 +132,50 @@ export default function Dashboard({
             />
           </View>
         )}
+      </Card>
+
+      {stale && !editingMileage && (
+        <Text style={styles.staleBanner}>
+          🧭 It's been {daysSinceMileageUpdate(rec)} days since your last mileage update — refresh it
+          so your reminders stay accurate.
+        </Text>
+      )}
+
+      <Card>
+        <Text style={styles.cadenceLabel}>Remind me to update mileage</Text>
+        <View style={styles.chipRow}>
+          {CADENCE_OPTIONS.map((o) => (
+            <Pressable
+              key={o.key}
+              onPress={() => chooseCadence(o.key)}
+              style={[styles.chip, rec.mileageCadence === o.key && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, rec.mileageCadence === o.key && styles.chipTextActive]}>
+                {o.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        {rec.mileageCadence === 'custom' && (
+          <View style={{ marginTop: spacing.md }}>
+            <Field
+              label="Every how many days?"
+              value={customDaysText}
+              onChangeText={(t) => {
+                setCustomDaysText(t);
+                const d = parseInt(t.replace(/[^0-9]/g, ''), 10);
+                if (d > 0) onSetCadence('custom', d);
+              }}
+              placeholder="e.g. 10"
+              keyboardType="numeric"
+            />
+          </View>
+        )}
+        <Text style={styles.cadenceHint}>
+          Currently: {cadenceLabel(rec)}. {Platform.OS === 'web'
+            ? 'Notifications fire on the mobile app.'
+            : 'You can update from the reminder or here.'}
+        </Text>
       </Card>
 
       {overdue.length + dueSoon.length > 0 ? (
@@ -142,6 +207,19 @@ export default function Dashboard({
       <Text style={styles.disclaimer}>
         Intervals are industry-standard averages — your owner's manual takes precedence.
       </Text>
+
+      <Button
+        title="Remove this vehicle"
+        variant="danger"
+        onPress={() =>
+          confirm(
+            'Remove vehicle',
+            `Remove your ${vehicleName(rec)} and all its history? This can't be undone.`,
+            onRemove,
+            true,
+          )
+        }
+      />
       <View style={{ height: spacing.xl }} />
     </ScrollView>
   );
@@ -206,13 +284,35 @@ function TaskRow({ task, onComplete }: { task: ComputedTask; onComplete: () => v
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, paddingTop: 64 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md },
+  content: { padding: spacing.md, paddingTop: 56 },
+  backRow: { marginBottom: spacing.sm },
+  back: { color: colors.accent, fontSize: 16, fontWeight: '600' },
   h1: { color: colors.text, fontSize: 24, fontWeight: '800' },
   sub: { color: colors.textDim, fontSize: 14, marginTop: 2 },
-  mileageCard: { marginBottom: spacing.md },
+  mileageCard: { marginTop: spacing.md, marginBottom: spacing.md },
   mileageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   mileageValue: { color: colors.text, fontSize: 26, fontWeight: '800' },
+  staleBanner: {
+    color: colors.warn,
+    backgroundColor: colors.warnSoft,
+    fontSize: 13,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  cadenceLabel: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.sm },
+  cadenceHint: { color: colors.textDim, fontSize: 12, marginTop: spacing.sm },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  chipActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  chipText: { color: colors.textDim, fontSize: 14 },
+  chipTextActive: { color: colors.text, fontWeight: '600' },
   notice: { color: colors.textDim, fontSize: 13, marginBottom: spacing.md, textAlign: 'center' },
   sectionTitle: {
     color: colors.text,
@@ -245,5 +345,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
 });

@@ -22,14 +22,26 @@ export interface TaskState {
   history: { mileage: number; date: string }[];
 }
 
-export interface AppData {
-  vehicle: Vehicle | null;
+/** How often the user wants to be prompted to refresh their odometer reading. */
+export type MileageCadence = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
+
+/** One saved vehicle plus everything tracked about it. */
+export interface VehicleRecord {
+  id: string;
+  vehicle: Vehicle;
   currentMileage: number;
   mileageUpdatedAt: string | null;
   tasks: Record<string, TaskState>;
-  /** Whether the initial "what was done already" questionnaire is complete */
-  onboarded: boolean;
-  reminderHour: number; // hour of day for weekly reminders (default 9)
+  mileageCadence: MileageCadence;
+  /** Days between mileage prompts when cadence === 'custom'. */
+  mileageCustomDays: number;
+  createdAt: string;
+}
+
+export interface AppData {
+  vehicles: VehicleRecord[];
+  reminderHour: number; // hour of day for scheduled reminders (default 9)
+  schemaVersion: number;
 }
 
 export type TaskStatus = 'overdue' | 'due-soon' | 'ok';

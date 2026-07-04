@@ -1,9 +1,17 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { AppData, ComputedTask } from './types';
-import { fmtMiles } from './logic';
+import { AppData, VehicleRecord } from './types';
+import { dueTasks, fmtMiles, vehicleName } from './logic';
+import { cadenceDays, cadenceLabel } from './cadence';
 
 const supported = Platform.OS !== 'web';
+
+export type NotificationKind = 'maintenance' | 'mileage';
+
+export interface NotificationTap {
+  vehicleId: string;
+  kind: NotificationKind;
+}
 
 if (supported) {
   Notifications.setNotificationHandler({
@@ -21,7 +29,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
   if (!supported) return false;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('maintenance-reminders', {
-      name: 'Maintenance reminders',
+      name: 'Maintenance & mileage reminders',
       importance: Notifications.AndroidImportance.HIGH,
     });
   }
@@ -31,13 +39,17 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return req.granted;
 }
 
+const androidChannel =
+  Platform.OS === 'android' ? { channelId: 'maintenance-reminders' } : {};
+
 /**
- * Reschedule all reminders to match the currently-due task list.
- * Each due task gets its own weekly repeating notification, firing on
- * today's weekday at `reminderHour` — i.e. roughly once a week from now —
- * until the task is completed (at which point rescheduling drops it).
+ * Reschedule every notification across all vehicles to match current state:
+ *  - one weekly reminder per due maintenance task (until it's checked off), and
+ *  - one recurring mileage-update prompt per vehicle on its chosen cadence.
+ * Tapping any notification carries a { vehicleId, kind } payload so the app can
+ * jump straight to the right car.
  */
-export async function syncReminders(data: AppData, due: ComputedTask[]): Promise<void> {
+export async function syncAllReminders(data: AppData): Promise<void> {
   if (!supported) return;
   const granted = await requestNotificationPermission();
   if (!granted) return;
@@ -45,28 +57,57 @@ export async function syncReminders(data: AppData, due: ComputedTask[]): Promise
   await Notifications.cancelAllScheduledNotificationsAsync();
 
   const weekday = new Date().getDay() + 1; // expo: 1 = Sunday … 7 = Saturday
-  for (const task of due) {
-    const overdueText =
-      task.milesOverdue >= 0
-        ? `${fmtMiles(task.milesOverdue)} overdue`
-        : `due in ${fmtMiles(-task.milesOverdue)}`;
+
+  for (const rec of data.vehicles) {
+    const label = vehicleName(rec);
+
+    for (const task of dueTasks(rec)) {
+      const overdueText =
+        task.milesOverdue >= 0
+          ? `${fmtMiles(task.milesOverdue)} overdue`
+          : `due in ${fmtMiles(-task.milesOverdue)}`;
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `🔧 Maintenance due: ${task.item.name}`,
+          body: `${task.item.name} is ${overdueText} on your ${label}. Open the app and check it off once it's done.`,
+          data: { vehicleId: rec.id, kind: 'maintenance' } satisfies NotificationTap,
+          ...androidChannel,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+          weekday,
+          hour: data.reminderHour,
+          minute: 0,
+        },
+      });
+    }
+
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `🔧 Maintenance due: ${task.item.name}`,
-        body: `${task.item.name} is ${overdueText} on your ${vehicleLabel(data)}. Open the app and check it off once it's done.`,
-        ...(Platform.OS === 'android' ? { channelId: 'maintenance-reminders' } : {}),
+        title: `🧭 Update your mileage`,
+        body: `Time to refresh the odometer on your ${label} (${cadenceLabel(rec)}). Tap to update it.`,
+        data: { vehicleId: rec.id, kind: 'mileage' } satisfies NotificationTap,
+        ...androidChannel,
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-        weekday,
-        hour: data.reminderHour,
-        minute: 0,
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: cadenceDays(rec) * 86_400,
+        repeats: true,
       },
     });
   }
 }
 
-function vehicleLabel(data: AppData): string {
-  const v = data.vehicle;
-  return v ? `${v.year} ${v.make} ${v.model}` : 'vehicle';
+/** Subscribe to notification taps. Returns an unsubscribe function. */
+export function addNotificationResponseListener(
+  handler: (tap: NotificationTap) => void,
+): () => void {
+  if (!supported) return () => {};
+  const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data as Partial<NotificationTap>;
+    if (data?.vehicleId && data?.kind) {
+      handler({ vehicleId: data.vehicleId, kind: data.kind });
+    }
+  });
+  return () => sub.remove();
 }

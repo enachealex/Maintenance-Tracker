@@ -1,35 +1,61 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { AppData, Vehicle } from './src/types';
-import { DEFAULT_DATA, loadData, saveData } from './src/storage';
-import { completeTask, dueTasks, setLastDone } from './src/logic';
-import { syncReminders } from './src/notifications';
+import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/types';
+import { DEFAULT_DATA, loadData, newVehicleRecord, saveData } from './src/storage';
+import { completeTask, setLastDone } from './src/logic';
+import { addNotificationResponseListener, syncAllReminders } from './src/notifications';
 import { SCHEDULE } from './src/data/schedule';
 import { colors } from './src/theme';
+import Home from './src/screens/Home';
 import VehicleSetup from './src/screens/VehicleSetup';
 import MileageSetup, { MileageSetupResult } from './src/screens/MileageSetup';
 import Dashboard from './src/screens/Dashboard';
 
+type Nav =
+  | { screen: 'home' }
+  | { screen: 'add-vehicle' }
+  | { screen: 'add-mileage'; vehicle: Vehicle }
+  | { screen: 'vehicle'; id: string; editMileage?: boolean };
+
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
+  const [nav, setNav] = useState<Nav>({ screen: 'home' });
+  const dataRef = useRef<AppData | null>(null);
+  dataRef.current = data;
 
   useEffect(() => {
-    loadData().then(setData);
+    loadData().then((d) => {
+      setData(d);
+      saveData(d); // persist any schema migration so old-shape data is upgraded
+      syncAllReminders(d);
+    });
   }, []);
 
-  /** Persist + reschedule weekly reminders every time state changes. */
+  // Tapping a notification jumps to that vehicle (and, for mileage prompts,
+  // straight into the odometer editor).
+  useEffect(() => {
+    return addNotificationResponseListener(({ vehicleId, kind }) => {
+      const exists = dataRef.current?.vehicles.some((v) => v.id === vehicleId);
+      if (exists) setNav({ screen: 'vehicle', id: vehicleId, editMileage: kind === 'mileage' });
+    });
+  }, []);
+
+  /** Persist + reschedule all reminders on every change. */
   const commit = useCallback((next: AppData) => {
     setData(next);
     saveData(next);
-    if (next.onboarded) syncReminders(next, dueTasks(next));
+    syncAllReminders(next);
   }, []);
 
-  // Re-sync reminders once on launch so they survive reinstalls/reboots.
-  useEffect(() => {
-    if (data?.onboarded) syncReminders(data, dueTasks(data));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.onboarded]);
+  const updateVehicle = useCallback(
+    (id: string, fn: (rec: VehicleRecord) => VehicleRecord) => {
+      const cur = dataRef.current;
+      if (!cur) return;
+      commit({ ...cur, vehicles: cur.vehicles.map((v) => (v.id === id ? fn(v) : v)) });
+    },
+    [commit],
+  );
 
   if (!data) {
     return (
@@ -39,12 +65,12 @@ export default function App() {
     );
   }
 
-  const handleVehicle = (vehicle: Vehicle) => {
-    commit({ ...data, vehicle });
-  };
-
-  const handleMileageSetup = ({ mileage, answers }: MileageSetupResult) => {
-    let next: AppData = { ...data, currentMileage: mileage, mileageUpdatedAt: new Date().toISOString() };
+  const handleMileageSetup = (vehicle: Vehicle, { mileage, answers }: MileageSetupResult) => {
+    let rec = newVehicleRecord({
+      vehicle,
+      currentMileage: mileage,
+      mileageUpdatedAt: new Date().toISOString(),
+    });
     // Translate questionnaire answers into "last done" mileages. A user
     // guesstimate of "miles ago" wins; otherwise fall back per choice:
     //   recently   → done at roughly current mileage (not due for a full interval)
@@ -53,43 +79,82 @@ export default function App() {
     for (const item of SCHEDULE) {
       const answer = answers[item.id];
       if (!answer) continue;
-      if (answer.choice === 'unknown') next = setLastDone(next, item.id, null);
+      if (answer.choice === 'unknown') rec = setLastDone(rec, item.id, null);
       else if (answer.milesAgo != null)
-        next = setLastDone(next, item.id, Math.max(0, mileage - answer.milesAgo));
-      else if (answer.choice === 'recent') next = setLastDone(next, item.id, mileage);
-      else
-        next = setLastDone(next, item.id, Math.max(0, mileage - Math.round(item.intervalMiles * 0.75)));
+        rec = setLastDone(rec, item.id, Math.max(0, mileage - answer.milesAgo));
+      else if (answer.choice === 'recent') rec = setLastDone(rec, item.id, mileage);
+      else rec = setLastDone(rec, item.id, Math.max(0, mileage - Math.round(item.intervalMiles * 0.75)));
     }
-    commit({ ...next, onboarded: true });
+    commit({ ...data, vehicles: [...data.vehicles, rec] });
+    setNav({ screen: 'vehicle', id: rec.id });
   };
 
-  const handleComplete = (itemId: string) => {
-    commit(completeTask(data, itemId, data.currentMileage));
-  };
-
-  const handleMileageUpdate = (mileage: number) => {
-    commit({ ...data, currentMileage: mileage, mileageUpdatedAt: new Date().toISOString() });
-  };
-
-  const handleChangeVehicle = () => {
-    // Keep service history; just re-run vehicle selection.
-    commit({ ...data, vehicle: null, onboarded: false });
+  const removeVehicle = (id: string) => {
+    commit({ ...data, vehicles: data.vehicles.filter((v) => v.id !== id) });
+    setNav({ screen: 'home' });
   };
 
   let screen: React.ReactNode;
-  if (!data.vehicle) {
-    screen = <VehicleSetup onDone={handleVehicle} />;
-  } else if (!data.onboarded) {
-    screen = <MileageSetup vehicle={data.vehicle} onDone={handleMileageSetup} />;
-  } else {
-    screen = (
-      <Dashboard
-        data={data}
-        onCompleteTask={handleComplete}
-        onUpdateMileage={handleMileageUpdate}
-        onChangeVehicle={handleChangeVehicle}
-      />
-    );
+  switch (nav.screen) {
+    case 'add-vehicle':
+      screen = (
+        <VehicleSetup
+          onDone={(vehicle) => setNav({ screen: 'add-mileage', vehicle })}
+          onCancel={data.vehicles.length > 0 ? () => setNav({ screen: 'home' }) : undefined}
+        />
+      );
+      break;
+    case 'add-mileage':
+      screen = (
+        <MileageSetup
+          vehicle={nav.vehicle}
+          onDone={(result) => handleMileageSetup(nav.vehicle, result)}
+        />
+      );
+      break;
+    case 'vehicle': {
+      const rec = data.vehicles.find((v) => v.id === nav.id);
+      if (!rec) {
+        screen = (
+          <Home
+            vehicles={data.vehicles}
+            onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
+            onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
+          />
+        );
+        break;
+      }
+      screen = (
+        <Dashboard
+          rec={rec}
+          startEditingMileage={nav.editMileage}
+          onCompleteTask={(itemId) =>
+            updateVehicle(rec.id, (r) => completeTask(r, itemId, r.currentMileage))
+          }
+          onUpdateMileage={(mileage) =>
+            updateVehicle(rec.id, (r) => ({
+              ...r,
+              currentMileage: mileage,
+              mileageUpdatedAt: new Date().toISOString(),
+            }))
+          }
+          onSetCadence={(cadence: MileageCadence, customDays: number) =>
+            updateVehicle(rec.id, (r) => ({ ...r, mileageCadence: cadence, mileageCustomDays: customDays }))
+          }
+          onBack={() => setNav({ screen: 'home' })}
+          onRemove={() => removeVehicle(rec.id)}
+        />
+      );
+      break;
+    }
+    default:
+      screen = (
+        <Home
+          vehicles={data.vehicles}
+          onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
+          onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
+        />
+      );
   }
 
   return (
