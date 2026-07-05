@@ -35,7 +35,9 @@ Notifications are **local / on-device** — no server or push service required �
 **Web / installed PWA** — `src/webNotifications.ts` + `public/sw.js`:
 - The garage screen shows an "Enable reminders" prompt; tapping it requests permission (must be a user gesture).
 - Once granted, the app writes a small "due" snapshot into the Cache API and registers **Periodic Background Sync**. On an **installed Android PWA** the service worker then shows reminders **while the app is closed, offline, with no server**.
-- **iOS** PWAs can show notifications when the app is opened, but iOS blocks background/scheduled local notifications — reaching a closed iOS PWA needs server-sent Web Push (the service worker already has a `push` handler ready for that backend).
+- **iOS** PWAs can show notifications when the app is opened, but iOS blocks background/scheduled local notifications — reaching a closed iOS PWA needs server-sent Web Push.
+
+**Web Push backend** (`push-worker/`, optional) — a Cloudflare Worker + cron that nudges every subscribed device on a schedule. The push carries **no vehicle data**; the service worker reads the on-device snapshot and renders the reminder, so nothing personal is stored server-side beyond the anonymous push subscription. Configure the client via `src/pushConfig.ts`. See [push-worker/README.md](push-worker/README.md).
 
 For a real native install:
 ```bash

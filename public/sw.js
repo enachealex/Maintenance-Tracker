@@ -24,51 +24,52 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Offline background reminder (Android/Chrome installed PWA).
+// Offline background reminder (Android/Chrome installed PWA). Stay quiet when
+// nothing is due.
 self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'maintenance-check') event.waitUntil(showDueFromSnapshot());
+  if (event.tag === 'maintenance-check') event.waitUntil(showDueFromSnapshot(false));
 });
 
-// Server-sent Web Push (active once the backend is configured).
+// Server-sent Web Push. The message carries no vehicle data — we read the
+// on-device snapshot and render it here, so personal data stays on the device.
+// Web Push requires a visible notification, so always show something.
 self.addEventListener('push', (event) => {
-  let payload = {};
-  try {
-    payload = event.data ? event.data.json() : {};
-  } catch (_) {}
-  const title = payload.title || '🔧 Maintenance reminder';
-  const body = payload.body || 'Open Maintenance Tracker to review what your vehicles need.';
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      tag: payload.tag || 'maintenance',
-      renotify: true,
-      data: payload.data || {},
-    }),
-  );
+  event.waitUntil(showDueFromSnapshot(true));
 });
 
-async function showDueFromSnapshot() {
+async function showDueFromSnapshot(alwaysShow) {
+  const opts = (body, tag) => ({
+    body,
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    tag: tag || 'maintenance-bg',
+    renotify: true,
+  });
   try {
     const cache = await caches.open(SNAPSHOT_CACHE);
     const res = await cache.match(SNAPSHOT_URL);
-    if (!res) return;
-    const snap = await res.json();
+    const snap = res ? await res.json() : { vehicles: [] };
     const due = (snap.vehicles || []).filter((v) => v.due > 0);
-    if (due.length === 0) return;
+    if (due.length === 0) {
+      if (alwaysShow) {
+        await self.registration.showNotification(
+          '✅ Maintenance check',
+          opts("You're all caught up — nothing due right now."),
+        );
+      }
+      return;
+    }
     const total = due.reduce((sum, v) => sum + v.due, 0);
     await self.registration.showNotification(
       `🔧 ${total} maintenance item${total > 1 ? 's' : ''} due`,
-      {
-        body: due.map((v) => `${v.name}: ${v.due} due`).join(' · '),
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
-        tag: 'maintenance-bg',
-        renotify: true,
-      },
+      opts(due.map((v) => `${v.name}: ${v.due} due`).join(' · ')),
     );
   } catch (_) {
-    /* offline / no snapshot yet — nothing to show */
+    if (alwaysShow) {
+      await self.registration.showNotification(
+        '🔧 Maintenance reminder',
+        opts('Open Maintenance Tracker to review your vehicles.'),
+      );
+    }
   }
 }

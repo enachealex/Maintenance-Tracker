@@ -12,11 +12,13 @@ export default function Home({
   onOpenVehicle,
   onAddVehicle,
   onNotificationsEnabled,
+  onSendTestReminder,
 }: {
   vehicles: VehicleRecord[];
   onOpenVehicle: (id: string) => void;
   onAddVehicle: () => void;
   onNotificationsEnabled: () => void;
+  onSendTestReminder: () => void;
 }) {
   const totalDue = vehicles.reduce((sum, v) => sum + dueCount(v), 0);
 
@@ -31,7 +33,9 @@ export default function Home({
             }`}
       </Text>
 
-      {vehicles.length > 0 && <NotificationPrompt onEnabled={onNotificationsEnabled} />}
+      {vehicles.length > 0 && (
+        <NotificationPrompt onEnabled={onNotificationsEnabled} onSendTest={onSendTestReminder} />
+      )}
 
       {vehicles.length === 0 ? (
         <Card style={styles.emptyCard}>

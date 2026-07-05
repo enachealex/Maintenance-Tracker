@@ -5,7 +5,7 @@ import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/types';
 import { DEFAULT_DATA, loadData, newVehicleRecord, saveData } from './src/storage';
 import { completeTask, setLastDone } from './src/logic';
 import { addNotificationResponseListener, syncAllReminders } from './src/notifications';
-import { registerServiceWorker, syncWebReminders } from './src/webNotifications';
+import { registerServiceWorker, sendTestReminder, syncWebReminders } from './src/webNotifications';
 import { SCHEDULE } from './src/data/schedule';
 import { colors } from './src/theme';
 import Home from './src/screens/Home';
@@ -54,6 +54,10 @@ export default function App() {
 
   const handleNotificationsEnabled = useCallback(() => {
     if (dataRef.current) syncWebReminders(dataRef.current, { confirm: true });
+  }, []);
+
+  const handleSendTestReminder = useCallback(() => {
+    if (dataRef.current) sendTestReminder(dataRef.current);
   }, []);
 
   const updateVehicle = useCallback(
@@ -129,6 +133,7 @@ export default function App() {
             onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
             onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
             onNotificationsEnabled={handleNotificationsEnabled}
+            onSendTestReminder={handleSendTestReminder}
           />
         );
         break;
@@ -163,6 +168,7 @@ export default function App() {
           onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
           onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
           onNotificationsEnabled={handleNotificationsEnabled}
+          onSendTestReminder={handleSendTestReminder}
         />
       );
   }

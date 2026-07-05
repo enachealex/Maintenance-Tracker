@@ -1,0 +1,18 @@
+name = "maintenance-push"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Weekly nudge: Mondays 15:00 UTC. The device fills in what's actually due.
+[triggers]
+crons = ["0 15 * * 1"]
+
+[vars]
+VAPID_PUBLIC_KEY = "BJNHEZlKQGOtnb89u5D-FskKeqRumQmodbsR1Zn2pqRBYJRivwkm9wJe1Z5m8kBLCYpzgIN7FwAEyoyYxoK6cs4"
+VAPID_SUBJECT = "mailto:enachealex1@gmail.com"
+
+# VAPID_PRIVATE_KEY and ADMIN_TOKEN are set via `wrangler secret put` (never committed).
+
+[[kv_namespaces]]
+binding = "SUBSCRIPTIONS"
+id = "4522401237bc4024a77b6938406d35c5"

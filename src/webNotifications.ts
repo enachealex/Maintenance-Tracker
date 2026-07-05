@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { AppData } from './types';
 import { dueCount, vehicleName } from './logic';
+import { PUSH_SERVER_URL, VAPID_PUBLIC_KEY } from './pushConfig';
 
 /**
  * Web/PWA notifications. Everything here is on-device and offline:
@@ -86,6 +87,42 @@ async function writeSnapshot(data: AppData): Promise<void> {
   }
 }
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+/**
+ * Subscribe to Web Push and register the subscription with the backend so the
+ * server can wake this device on a schedule (mainly for iOS / exact timing;
+ * Android also gets on-device background sync). The push carries no data — the
+ * service worker renders reminders from the on-device snapshot.
+ */
+async function subscribeToPush(reg: ServiceWorkerRegistration): Promise<void> {
+  if (!PUSH_SERVER_URL || !VAPID_PUBLIC_KEY) return;
+  if (!('pushManager' in reg)) return;
+  try {
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
+      });
+    }
+    await fetch(`${PUSH_SERVER_URL}/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub),
+    });
+  } catch {
+    /* push unsupported or offline — background sync still covers Android */
+  }
+}
+
 async function ensureBackgroundSync(reg: ServiceWorkerRegistration): Promise<void> {
   try {
     if (!('periodicSync' in reg)) return; // Android/Chrome only
@@ -132,7 +169,10 @@ export async function syncWebReminders(
   if (getPermission() !== 'granted') return;
   const reg = await getRegistration();
   await writeSnapshot(data);
-  if (reg) await ensureBackgroundSync(reg);
+  if (reg) {
+    await ensureBackgroundSync(reg); // Android offline background reminders
+    await subscribeToPush(reg); // server push (all platforms)
+  }
 
   if (!confirm) return;
   const due = data.vehicles.filter((v) => dueCount(v) > 0);
@@ -146,4 +186,22 @@ export async function syncWebReminders(
       due.map((v) => `${vehicleName(v)}: ${dueCount(v)} due`).join(' · '),
     );
   }
+}
+
+/** Fire a reminder right now so the user can confirm notifications work on their device. */
+export async function sendTestReminder(data: AppData): Promise<boolean> {
+  if (getPermission() !== 'granted') return false;
+  const reg = await getRegistration();
+  const due = data.vehicles.filter((v) => dueCount(v) > 0);
+  const total = due.reduce((sum, v) => sum + dueCount(v), 0);
+  if (total > 0) {
+    await showNotification(
+      reg,
+      `🔧 ${total} maintenance item${total > 1 ? 's' : ''} due`,
+      due.map((v) => `${vehicleName(v)}: ${dueCount(v)} due`).join(' · '),
+    );
+  } else {
+    await showNotification(reg, '🔔 Test reminder', "This is how reminders will look. You're all caught up right now.");
+  }
+  return true;
 }
