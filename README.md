@@ -26,12 +26,21 @@ npx expo start --web  # quick UI preview in the browser (no notifications on web
 
 ### Notifications: what to know
 
-- **Local weekly notifications** are used — no server or push service needed. They fire even when the app is closed.
-- On **Android**, scheduled notifications don't survive a reboot; the app re-registers them every time it launches, so open the app occasionally after restarting your phone.
-- **Expo Go** is fine for development. For a real install (and the most reliable notification behavior), build the app:
-  ```bash
-  npx eas build --platform android   # or ios (requires an Expo account)
-  ```
+Notifications are **local / on-device** — no server or push service required — and differ by platform:
+
+**Native app (Expo Go or an EAS build)** — `src/notifications.ts` uses `expo-notifications`:
+- A repeating weekly reminder per due maintenance task, plus a per-vehicle mileage-update prompt on the chosen cadence. They fire even when the app is closed.
+- On **Android**, scheduled notifications don't survive a reboot; the app re-registers them on launch, so open it occasionally after restarting your phone.
+
+**Web / installed PWA** — `src/webNotifications.ts` + `public/sw.js`:
+- The garage screen shows an "Enable reminders" prompt; tapping it requests permission (must be a user gesture).
+- Once granted, the app writes a small "due" snapshot into the Cache API and registers **Periodic Background Sync**. On an **installed Android PWA** the service worker then shows reminders **while the app is closed, offline, with no server**.
+- **iOS** PWAs can show notifications when the app is opened, but iOS blocks background/scheduled local notifications — reaching a closed iOS PWA needs server-sent Web Push (the service worker already has a `push` handler ready for that backend).
+
+For a real native install:
+```bash
+npx eas build --platform android   # or ios (requires an Expo account)
+```
 
 ## Project layout
 
@@ -41,13 +50,16 @@ src/api/vehicles.ts         NHTSA + EPA vehicle-data clients
 src/data/schedule.ts        maintenance items & intervals
 src/logic.ts                per-vehicle due/overdue computation, task completion
 src/cadence.ts              mileage-update cadence math (stale detection)
-src/notifications.ts        reminder + mileage-prompt scheduling (expo-notifications)
+src/notifications.ts        native reminder scheduling (expo-notifications)
+src/webNotifications.ts     web/PWA notifications + background-sync snapshot
+public/sw.js                service worker: taps, background sync, web push
 src/storage.ts              AsyncStorage persistence + v1→v2 migration
 src/screens/Home           garage: vehicle list with due-count badges
 src/screens/VehicleSetup    year/make/model/trim pickers
 src/screens/MileageSetup    odometer + service-history questionnaire
 src/screens/Dashboard       per-vehicle checklist, mileage, cadence, remove
 src/components/ui.tsx       shared buttons, cards, searchable select
+src/components/NotificationPrompt.tsx   web "enable reminders" card
 ```
 
 Data lives entirely on the user's own device (AsyncStorage / browser `localStorage`) — there is no backend, so no user's data is ever visible to anyone else.

@@ -5,6 +5,7 @@ import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/types';
 import { DEFAULT_DATA, loadData, newVehicleRecord, saveData } from './src/storage';
 import { completeTask, setLastDone } from './src/logic';
 import { addNotificationResponseListener, syncAllReminders } from './src/notifications';
+import { registerServiceWorker, syncWebReminders } from './src/webNotifications';
 import { SCHEDULE } from './src/data/schedule';
 import { colors } from './src/theme';
 import Home from './src/screens/Home';
@@ -25,10 +26,12 @@ export default function App() {
   dataRef.current = data;
 
   useEffect(() => {
+    registerServiceWorker(); // web/PWA: enables offline background reminders + push
     loadData().then((d) => {
       setData(d);
       saveData(d); // persist any schema migration so old-shape data is upgraded
-      syncAllReminders(d);
+      syncAllReminders(d); // native scheduled reminders
+      syncWebReminders(d); // web: refresh background snapshot (no-op if not granted)
     });
   }, []);
 
@@ -46,6 +49,11 @@ export default function App() {
     setData(next);
     saveData(next);
     syncAllReminders(next);
+    syncWebReminders(next);
+  }, []);
+
+  const handleNotificationsEnabled = useCallback(() => {
+    if (dataRef.current) syncWebReminders(dataRef.current, { confirm: true });
   }, []);
 
   const updateVehicle = useCallback(
@@ -120,6 +128,7 @@ export default function App() {
             vehicles={data.vehicles}
             onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
             onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
+            onNotificationsEnabled={handleNotificationsEnabled}
           />
         );
         break;
@@ -153,6 +162,7 @@ export default function App() {
           vehicles={data.vehicles}
           onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
           onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
+          onNotificationsEnabled={handleNotificationsEnabled}
         />
       );
   }

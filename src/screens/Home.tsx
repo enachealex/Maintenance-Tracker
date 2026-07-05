@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card } from '../components/ui';
+import NotificationPrompt from '../components/NotificationPrompt';
 import { colors, spacing } from '../theme';
 import { dueCount, fmtMiles, vehicleName } from '../logic';
 import { cadenceLabel, isMileageStale } from '../cadence';
@@ -10,10 +11,12 @@ export default function Home({
   vehicles,
   onOpenVehicle,
   onAddVehicle,
+  onNotificationsEnabled,
 }: {
   vehicles: VehicleRecord[];
   onOpenVehicle: (id: string) => void;
   onAddVehicle: () => void;
+  onNotificationsEnabled: () => void;
 }) {
   const totalDue = vehicles.reduce((sum, v) => sum + dueCount(v), 0);
 
@@ -27,6 +30,8 @@ export default function Home({
               totalDue === 0 ? 'all caught up' : `${totalDue} item${totalDue > 1 ? 's' : ''} needing attention`
             }`}
       </Text>
+
+      {vehicles.length > 0 && <NotificationPrompt onEnabled={onNotificationsEnabled} />}
 
       {vehicles.length === 0 ? (
         <Card style={styles.emptyCard}>
