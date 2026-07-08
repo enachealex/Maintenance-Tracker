@@ -35,6 +35,8 @@ export interface VehicleRecord {
   mileageCadence: MileageCadence;
   /** Days between mileage prompts when cadence === 'custom'. */
   mileageCustomDays: number;
+  /** User-defined maintenance items, tracked alongside the standard schedule. */
+  customItems: ScheduleItem[];
   createdAt: string;
 }
 

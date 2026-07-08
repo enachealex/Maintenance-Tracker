@@ -82,6 +82,14 @@ export async function syncAllReminders(data: AppData): Promise<void> {
       });
     }
 
+    // Fire when the reading actually goes stale (measured from the last
+    // odometer update, not from now — a repeating interval would restart on
+    // every app change and could postpone the prompt forever). One-shot:
+    // every sync re-arms it, and tapping it opens the app, which re-syncs.
+    const elapsedS = rec.mileageUpdatedAt
+      ? Math.max(0, (Date.now() - Date.parse(rec.mileageUpdatedAt)) / 1000)
+      : 0;
+    const remainingS = cadenceDays(rec) * 86_400 - elapsedS;
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `🧭 Update your mileage`,
@@ -91,8 +99,8 @@ export async function syncAllReminders(data: AppData): Promise<void> {
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: cadenceDays(rec) * 86_400,
-        repeats: true,
+        seconds: Math.max(Math.round(remainingS), 3600), // if already stale, nudge in an hour
+        repeats: false,
       },
     });
   }

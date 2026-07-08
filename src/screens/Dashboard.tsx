@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { computeTasks, fmtMiles, vehicleName } from '../logic';
+import { computeTasks, fmtMiles, isCustomItem, vehicleName } from '../logic';
 import { CADENCE_OPTIONS, cadenceLabel, daysSinceMileageUpdate, isMileageStale } from '../cadence';
 import { Button, Card, Field } from '../components/ui';
 import { colors, spacing } from '../theme';
@@ -20,6 +20,8 @@ export default function Dashboard({
   onCompleteTask,
   onUpdateMileage,
   onSetCadence,
+  onAddCustomItem,
+  onRemoveCustomItem,
   onBack,
   onRemove,
 }: {
@@ -28,6 +30,8 @@ export default function Dashboard({
   onCompleteTask: (itemId: string) => void;
   onUpdateMileage: (mileage: number) => void;
   onSetCadence: (cadence: MileageCadence, customDays: number) => void;
+  onAddCustomItem: (fields: { name: string; intervalMiles: number; milesAgo: number | null }) => void;
+  onRemoveCustomItem: (itemId: string) => void;
   onBack: () => void;
   onRemove: () => void;
 }) {
@@ -39,6 +43,10 @@ export default function Dashboard({
   const [editingMileage, setEditingMileage] = useState(!!startEditingMileage);
   const [mileageText, setMileageText] = useState('');
   const [customDaysText, setCustomDaysText] = useState(String(rec.mileageCustomDays));
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customInterval, setCustomInterval] = useState('');
+  const [customLastAgo, setCustomLastAgo] = useState('');
 
   useEffect(() => {
     if (startEditingMileage) {
@@ -80,6 +88,24 @@ export default function Dashboard({
     const days = parseInt(customDaysText.replace(/[^0-9]/g, ''), 10) || rec.mileageCustomDays;
     onSetCadence(cadence, days);
   };
+
+  const saveCustomItem = () => {
+    const name = customName.trim();
+    const intervalMiles = parseInt(customInterval.replace(/[^0-9]/g, ''), 10);
+    if (!name || !(intervalMiles > 0)) return;
+    const agoDigits = customLastAgo.replace(/[^0-9]/g, '');
+    const milesAgo = agoDigits === '' ? null : Math.min(parseInt(agoDigits, 10), rec.currentMileage);
+    onAddCustomItem({ name, intervalMiles, milesAgo });
+    setAddingCustom(false);
+  };
+
+  const confirmRemoveCustom = (task: ComputedTask) =>
+    confirm(
+      'Remove custom item',
+      `Remove "${task.item.name}" and its history from this vehicle?`,
+      () => onRemoveCustomItem(task.item.id),
+      true,
+    );
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -172,9 +198,8 @@ export default function Dashboard({
           </View>
         )}
         <Text style={styles.cadenceHint}>
-          Currently: {cadenceLabel(rec)}. {Platform.OS === 'web'
-            ? 'Notifications fire on the mobile app.'
-            : 'You can update from the reminder or here.'}
+          Currently: {cadenceLabel(rec)}. Once the reading is older than this, you'll get a
+          reminder — tap it to update, or update right here.
         </Text>
       </Card>
 
@@ -188,21 +213,81 @@ export default function Dashboard({
 
       <Section title={`Overdue (${overdue.length})`} empty="Nothing overdue. 🎉">
         {overdue.map((t) => (
-          <TaskRow key={t.item.id} task={t} onComplete={() => confirmComplete(t)} />
+          <TaskRow
+            key={t.item.id}
+            task={t}
+            onComplete={() => confirmComplete(t)}
+            onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
+          />
         ))}
       </Section>
 
       <Section title={`Due soon (${dueSoon.length})`} empty="Nothing coming up in the next 500 miles.">
         {dueSoon.map((t) => (
-          <TaskRow key={t.item.id} task={t} onComplete={() => confirmComplete(t)} />
+          <TaskRow
+            key={t.item.id}
+            task={t}
+            onComplete={() => confirmComplete(t)}
+            onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
+          />
         ))}
       </Section>
 
       <Section title="Upcoming" empty="">
         {upcoming.map((t) => (
-          <TaskRow key={t.item.id} task={t} onComplete={() => confirmComplete(t)} />
+          <TaskRow
+            key={t.item.id}
+            task={t}
+            onComplete={() => confirmComplete(t)}
+            onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
+          />
         ))}
       </Section>
+
+      {addingCustom ? (
+        <Card>
+          <Text style={styles.cadenceLabel}>🔧 New custom maintenance</Text>
+          <Field
+            label="Name"
+            value={customName}
+            onChangeText={setCustomName}
+            placeholder="e.g. Timing belt, Fuel filter"
+          />
+          <Field
+            label="Repeat every (miles)"
+            value={customInterval}
+            onChangeText={setCustomInterval}
+            placeholder="e.g. 60000"
+            keyboardType="numeric"
+          />
+          <Field
+            label="Last done how many miles ago? (blank = never / not sure)"
+            value={customLastAgo}
+            onChangeText={setCustomLastAgo}
+            placeholder="e.g. 12000"
+            keyboardType="numeric"
+          />
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <View style={{ flex: 1 }}>
+              <Button title="Cancel" variant="ghost" onPress={() => setAddingCustom(false)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button title="Add item" onPress={saveCustomItem} />
+            </View>
+          </View>
+        </Card>
+      ) : (
+        <Button
+          title="＋ Add custom maintenance"
+          variant="ghost"
+          onPress={() => {
+            setCustomName('');
+            setCustomInterval('');
+            setCustomLastAgo('');
+            setAddingCustom(true);
+          }}
+        />
+      )}
 
       <Text style={styles.disclaimer}>
         Intervals are industry-standard averages — your owner's manual takes precedence.
@@ -244,7 +329,15 @@ function Section({
   );
 }
 
-function TaskRow({ task, onComplete }: { task: ComputedTask; onComplete: () => void }) {
+function TaskRow({
+  task,
+  onComplete,
+  onRemove,
+}: {
+  task: ComputedTask;
+  onComplete: () => void;
+  onRemove?: () => void;
+}) {
   const { item, status, nextDueMileage, milesOverdue, state } = task;
   const badge =
     status === 'overdue'
@@ -272,6 +365,11 @@ function TaskRow({ task, onComplete }: { task: ComputedTask; onComplete: () => v
             </Text>
           </View>
         </View>
+        {onRemove && (
+          <Pressable style={styles.removeButton} onPress={onRemove} hitSlop={8}>
+            <Text style={{ color: colors.textDim, fontSize: 16 }}>✕</Text>
+          </Pressable>
+        )}
         {status !== 'ok' && (
           <Pressable style={styles.checkButton} onPress={onComplete} hitSlop={8}>
             <Text style={{ color: colors.ok, fontSize: 22 }}>✓</Text>
@@ -336,6 +434,16 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: colors.ok,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
+  },
+  removeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.sm,

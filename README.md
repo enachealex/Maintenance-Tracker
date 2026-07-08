@@ -10,7 +10,7 @@ A React Native (Expo) app that tracks vehicle maintenance by mileage and nags yo
    - Sub-model / engine variants come from the **EPA fueleconomy.gov API** (1984 – current).
    - If a variant isn't in the EPA data (brand-new models, rare imports), you can type the trim and engine manually.
 3. **Mileage & history** — enter the current odometer reading, then answer a quick questionnaire about which services were already done ("Recently / A while ago / Never–not sure", with an optional "how many miles ago" guesstimate) so the initial checklist reflects reality.
-4. **Checklist dashboard** — every service is shown as **Overdue**, **Due soon** (within 500 mi), or **Upcoming**, with exact due mileages. Update the odometer any time; statuses recompute.
+4. **Checklist dashboard** — every service is shown as **Overdue**, **Due soon** (within 500 mi), or **Upcoming**, with exact due mileages. Update the odometer any time; statuses recompute. Add **custom maintenance items** (name + interval, e.g. "Timing belt every 60,000 mi") per vehicle — they're tracked, reminded, and badge-counted exactly like the standard schedule, and can be removed.
 5. **Mileage-update cadence** — pick how often each vehicle should nudge you to refresh its odometer: **Daily / Weekly / Bi-weekly / Monthly / Custom**. If the reading goes stale, the app shows a banner and (on mobile) fires a reminder you can tap to update straight away.
 6. **Reminders** — each overdue/due-soon task schedules a repeating **weekly local notification** that keeps firing until you check the task off, and each vehicle has its own mileage-update prompt on the chosen cadence. Tapping a notification deep-links to that specific vehicle. Completing a task records it in history and silences its reminder.
 
@@ -34,7 +34,8 @@ Notifications are **local / on-device** — no server or push service required �
 
 **Web / installed PWA** — `src/webNotifications.ts` + `public/sw.js`:
 - The garage screen shows an "Enable reminders" prompt; tapping it requests permission (must be a user gesture).
-- Once granted, the app writes a small "due" snapshot into the Cache API and registers **Periodic Background Sync**. On an **installed Android PWA** the service worker then shows reminders **while the app is closed, offline, with no server**.
+- Once granted, the app writes a snapshot into the Cache API (due counts + odometer age + cadence per vehicle) and registers **Periodic Background Sync**. On an **installed Android PWA** the service worker then shows reminders **while the app is closed, offline, with no server**.
+- At each background-sync or push event the service worker decides what to show: a per-vehicle **"Update your mileage"** prompt when the reading is older than that vehicle's cadence (tapping it deep-links into the odometer editor), and/or a **maintenance-due summary**. The cadence setting is evaluated at event time, so Daily/Weekly/Bi-weekly/Monthly/Custom all behave correctly even though the underlying wake-ups are browser-scheduled.
 - **iOS** PWAs can show notifications when the app is opened, but iOS blocks background/scheduled local notifications — reaching a closed iOS PWA needs server-sent Web Push.
 
 **Web Push backend** (`push-worker/`, optional) — a Cloudflare Worker + cron that nudges every subscribed device on a schedule. The push carries **no vehicle data**; the service worker reads the on-device snapshot and renders the reminder, so nothing personal is stored server-side beyond the anonymous push subscription. Configure the client via `src/pushConfig.ts`. See [push-worker/README.md](push-worker/README.md).

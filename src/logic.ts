@@ -1,5 +1,6 @@
 import { SCHEDULE } from './data/schedule';
-import { ComputedTask, TaskState, TaskStatus, VehicleRecord } from './types';
+import { genId } from './storage';
+import { ComputedTask, ScheduleItem, TaskState, TaskStatus, VehicleRecord } from './types';
 
 /** A task counts as "due soon" within this many miles of its due point. */
 const DUE_SOON_MILES = 500;
@@ -14,6 +15,11 @@ export function getTaskState(rec: VehicleRecord, itemId: string): TaskState {
   return rec.tasks[itemId] ?? emptyState();
 }
 
+/** Standard schedule plus the vehicle's user-defined custom items. */
+export function itemsFor(rec: VehicleRecord): ScheduleItem[] {
+  return [...SCHEDULE, ...(rec.customItems ?? [])];
+}
+
 /**
  * Compute the status of every schedule item for the vehicle's current mileage.
  * If a task has never been recorded, it is treated as if last done at
@@ -21,7 +27,7 @@ export function getTaskState(rec: VehicleRecord, itemId: string): TaskState {
  */
 export function computeTasks(rec: VehicleRecord): ComputedTask[] {
   const mileage = rec.currentMileage;
-  return SCHEDULE.map((item) => {
+  return itemsFor(rec).map((item) => {
     const state = getTaskState(rec, item.id);
     const lastDone = state.lastDoneMileage ?? 0;
     const nextDueMileage = lastDone + item.intervalMiles;
@@ -74,6 +80,38 @@ export function setLastDone(
     },
   };
 }
+
+/**
+ * Add a user-defined maintenance item. `milesAgo` seeds when it was last
+ * done; null means never/unknown (due once the odometer passes the interval).
+ */
+export function addCustomItem(
+  rec: VehicleRecord,
+  fields: { name: string; intervalMiles: number; milesAgo: number | null },
+): VehicleRecord {
+  const item: ScheduleItem = {
+    id: `custom-${genId()}`,
+    name: fields.name,
+    description: 'Custom maintenance item',
+    intervalMiles: fields.intervalMiles,
+    icon: '🔧',
+  };
+  const next = { ...rec, customItems: [...(rec.customItems ?? []), item] };
+  if (fields.milesAgo == null) return next;
+  return setLastDone(next, item.id, Math.max(0, rec.currentMileage - fields.milesAgo));
+}
+
+/** Remove a custom item along with its service history. */
+export function removeCustomItem(rec: VehicleRecord, itemId: string): VehicleRecord {
+  const { [itemId]: _dropped, ...tasks } = rec.tasks;
+  return {
+    ...rec,
+    customItems: (rec.customItems ?? []).filter((i) => i.id !== itemId),
+    tasks,
+  };
+}
+
+export const isCustomItem = (itemId: string) => itemId.startsWith('custom-');
 
 export const fmtMiles = (n: number) => `${Math.round(n).toLocaleString()} mi`;
 

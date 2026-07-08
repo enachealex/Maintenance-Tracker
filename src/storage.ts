@@ -22,6 +22,7 @@ export function newVehicleRecord(fields: Partial<VehicleRecord> & Pick<VehicleRe
     tasks: {},
     mileageCadence: 'monthly',
     mileageCustomDays: 30,
+    customItems: [],
     createdAt: new Date().toISOString(),
     ...fields,
   };
@@ -34,7 +35,13 @@ export function newVehicleRecord(fields: Partial<VehicleRecord> & Pick<VehicleRe
  */
 function migrate(parsed: any): AppData {
   if (Array.isArray(parsed?.vehicles)) {
-    return { ...DEFAULT_DATA, ...parsed, schemaVersion: SCHEMA_VERSION };
+    return {
+      ...DEFAULT_DATA,
+      ...parsed,
+      // vehicles saved before customItems existed need the default filled in
+      vehicles: parsed.vehicles.map((v: any) => ({ customItems: [], ...v })),
+      schemaVersion: SCHEMA_VERSION,
+    };
   }
   const vehicles: VehicleRecord[] = [];
   if (parsed?.vehicle && parsed?.onboarded) {

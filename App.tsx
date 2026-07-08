@@ -3,9 +3,15 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/types';
 import { DEFAULT_DATA, loadData, newVehicleRecord, saveData } from './src/storage';
-import { completeTask, setLastDone } from './src/logic';
+import { addCustomItem, completeTask, removeCustomItem, setLastDone } from './src/logic';
 import { addNotificationResponseListener, syncAllReminders } from './src/notifications';
-import { registerServiceWorker, sendTestReminder, syncWebReminders } from './src/webNotifications';
+import {
+  addWebNotificationTapListener,
+  getInitialWebNav,
+  registerServiceWorker,
+  sendTestReminder,
+  syncWebReminders,
+} from './src/webNotifications';
 import { SCHEDULE } from './src/data/schedule';
 import { colors } from './src/theme';
 import Home from './src/screens/Home';
@@ -32,6 +38,11 @@ export default function App() {
       saveData(d); // persist any schema migration so old-shape data is upgraded
       syncAllReminders(d); // native scheduled reminders
       syncWebReminders(d); // web: refresh background snapshot (no-op if not granted)
+      // Cold start from a web notification tap (?vehicle=…&editMileage=1)
+      const tap = getInitialWebNav();
+      if (tap && d.vehicles.some((v) => v.id === tap.vehicleId)) {
+        setNav({ screen: 'vehicle', id: tap.vehicleId, editMileage: tap.editMileage });
+      }
     });
   }, []);
 
@@ -41,6 +52,14 @@ export default function App() {
     return addNotificationResponseListener(({ vehicleId, kind }) => {
       const exists = dataRef.current?.vehicles.some((v) => v.id === vehicleId);
       if (exists) setNav({ screen: 'vehicle', id: vehicleId, editMileage: kind === 'mileage' });
+    });
+  }, []);
+
+  // Same, for web notification taps arriving while the app is already open.
+  useEffect(() => {
+    return addWebNotificationTapListener(({ vehicleId, editMileage }) => {
+      const exists = dataRef.current?.vehicles.some((v) => v.id === vehicleId);
+      if (exists) setNav({ screen: 'vehicle', id: vehicleId, editMileage });
     });
   }, []);
 
@@ -155,6 +174,8 @@ export default function App() {
           onSetCadence={(cadence: MileageCadence, customDays: number) =>
             updateVehicle(rec.id, (r) => ({ ...r, mileageCadence: cadence, mileageCustomDays: customDays }))
           }
+          onAddCustomItem={(fields) => updateVehicle(rec.id, (r) => addCustomItem(r, fields))}
+          onRemoveCustomItem={(itemId) => updateVehicle(rec.id, (r) => removeCustomItem(r, itemId))}
           onBack={() => setNav({ screen: 'home' })}
           onRemove={() => removeVehicle(rec.id)}
         />

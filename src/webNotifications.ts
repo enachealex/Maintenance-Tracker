@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { AppData } from './types';
 import { dueCount, vehicleName } from './logic';
+import { cadenceDays } from './cadence';
 import { PUSH_SERVER_URL, VAPID_PUBLIC_KEY } from './pushConfig';
 
 /**
@@ -63,11 +64,21 @@ export async function requestPermission(): Promise<PermState> {
   }
 }
 
+/**
+ * Everything the service worker needs to decide, at event time, whether to
+ * show a "maintenance due" reminder, a "update your mileage" prompt, or both.
+ * All vehicles are included (a vehicle with nothing due can still have a
+ * stale odometer reading).
+ */
 function buildSnapshot(data: AppData) {
   return {
-    vehicles: data.vehicles
-      .map((v) => ({ name: vehicleName(v), due: dueCount(v) }))
-      .filter((v) => v.due > 0),
+    vehicles: data.vehicles.map((v) => ({
+      id: v.id,
+      name: vehicleName(v),
+      due: dueCount(v),
+      mileageUpdatedAt: v.mileageUpdatedAt,
+      cadenceDays: cadenceDays(v),
+    })),
     savedAt: Date.now(),
   };
 }
@@ -186,6 +197,44 @@ export async function syncWebReminders(
       due.map((v) => `${vehicleName(v)}: ${dueCount(v)} due`).join(' · '),
     );
   }
+}
+
+export interface WebTap {
+  vehicleId: string;
+  editMileage: boolean;
+}
+
+function parseNavUrl(url: string): WebTap | null {
+  try {
+    const u = new URL(url, 'https://placeholder.local');
+    const vehicleId = u.searchParams.get('vehicle');
+    if (!vehicleId) return null;
+    return { vehicleId, editMileage: u.searchParams.get('editMileage') === '1' };
+  } catch {
+    return null;
+  }
+}
+
+/** Deep link when the app is cold-started from a notification tap (?vehicle=…). */
+export function getInitialWebNav(): WebTap | null {
+  if (!isWeb || typeof window === 'undefined') return null;
+  const tap = parseNavUrl(window.location.href);
+  if (tap) window.history.replaceState(null, '', '/');
+  return tap;
+}
+
+/** Deep link when a notification is tapped while the app is already open. */
+export function addWebNotificationTapListener(handler: (tap: WebTap) => void): () => void {
+  if (!canNotify()) return () => {};
+  const onMessage = (event: MessageEvent) => {
+    const d = event.data;
+    if (d?.type === 'notification-click' && typeof d.url === 'string') {
+      const tap = parseNavUrl(d.url);
+      if (tap) handler(tap);
+    }
+  };
+  navigator.serviceWorker.addEventListener('message', onMessage);
+  return () => navigator.serviceWorker.removeEventListener('message', onMessage);
 }
 
 /** Fire a reminder right now so the user can confirm notifications work on their device. */
