@@ -12,6 +12,7 @@ import {
   sendTestReminder,
   syncWebReminders,
 } from './src/webNotifications';
+import { setupWebViewport } from './src/webViewport';
 import { SCHEDULE } from './src/data/schedule';
 import { colors } from './src/theme';
 import Home from './src/screens/Home';
@@ -32,6 +33,7 @@ export default function App() {
   dataRef.current = data;
 
   useEffect(() => {
+    setupWebViewport(); // web: fill the usable screen (dvh + safe-area support)
     registerServiceWorker(); // web/PWA: enables offline background reminders + push
     loadData().then((d) => {
       setData(d);

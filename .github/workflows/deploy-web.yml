@@ -27,8 +27,10 @@ jobs:
 
       - run: npx expo export --platform web
 
+      # PWA manifest link + theme color (expo export doesn't emit these),
       # SPA fallback, custom domain, and keep Jekyll away from _expo/
       - run: |
+          sed -i 's|</head>|<link rel="manifest" href="/manifest.webmanifest" /><meta name="theme-color" content="#0F1420" /></head>|' dist/index.html
           cp dist/index.html dist/404.html
           echo "maintenance.thejumpvault.com" > dist/CNAME
           touch dist/.nojekyll
