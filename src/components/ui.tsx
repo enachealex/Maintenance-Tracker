@@ -155,9 +155,11 @@ export function SelectField({
           >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{label}</Text>
-              <Pressable onPress={() => setOpen(false)} hitSlop={12}>
-                <Text style={{ color: colors.accent, fontSize: 16 }}>Close</Text>
-              </Pressable>
+              {wide && (
+                <Pressable onPress={() => setOpen(false)} hitSlop={12}>
+                  <Text style={{ color: colors.accent, fontSize: 16 }}>Close</Text>
+                </Pressable>
+              )}
             </View>
             <TextInput
               style={styles.search}
@@ -172,6 +174,8 @@ export function SelectField({
               keyExtractor={(item) => item}
               keyboardShouldPersistTaps="handled"
               style={wide ? styles.listWide : styles.listFull}
+              // keep the last options tappable above the floating Close button
+              contentContainerStyle={!wide && { paddingBottom: 96 }}
               renderItem={({ item }) => (
                 <Pressable
                   style={({ pressed }) => [styles.option, pressed && { opacity: 0.6 }]}
@@ -189,6 +193,15 @@ export function SelectField({
                 </Text>
               }
             />
+            {!wide && (
+              <Pressable
+                style={({ pressed }) => [styles.closeFab, pressed && { opacity: 0.8 }]}
+                onPress={() => setOpen(false)}
+                hitSlop={8}
+              >
+                <Text style={styles.closeFabText}>Close</Text>
+              </Pressable>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -279,6 +292,21 @@ const styles = StyleSheet.create({
   sheetFull: { flex: 1, width: '100%', borderRadius: 0, borderWidth: 0, paddingTop: 56 },
   listWide: { flexGrow: 0, flexShrink: 1 },
   listFull: { flex: 1 },
+  closeFab: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: spacing.lg,
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  closeFabText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
