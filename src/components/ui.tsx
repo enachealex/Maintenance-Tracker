@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { colors, spacing } from '../theme';
@@ -101,6 +102,10 @@ export function SelectField({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const { width: winW, height: winH } = useWindowDimensions();
+  // On wide (desktop) viewports the options open as a centered dialog card
+  // instead of taking over the whole page; phones keep the full-screen picker.
+  const wide = winW >= 768;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -130,47 +135,62 @@ export function SelectField({
 
       <Modal
         visible={open}
+        transparent
         // react-native-web fails to unmount slide-animated modals
         animationType={Platform.OS === 'web' ? 'none' : 'slide'}
         onRequestClose={() => setOpen(false)}
       >
-        <View style={styles.modal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{label}</Text>
-            <Pressable onPress={() => setOpen(false)} hitSlop={12}>
-              <Text style={{ color: colors.accent, fontSize: 16 }}>Close</Text>
-            </Pressable>
-          </View>
-          <TextInput
-            style={styles.search}
-            placeholder="Search…"
-            placeholderTextColor={colors.textDim}
-            value={query}
-            onChangeText={setQuery}
-            autoFocus
-          />
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [styles.option, pressed && { opacity: 0.6 }]}
-                onPress={() => {
-                  onSelect(item);
-                  setOpen(false);
-                }}
-              >
-                <Text style={styles.optionText}>{item}</Text>
+        <Pressable
+          style={[styles.backdrop, wide && styles.backdropWide]}
+          onPress={() => setOpen(false)}
+        >
+          <Pressable
+            style={[
+              styles.sheet,
+              wide
+                ? { width: Math.min(520, winW - 48), maxHeight: Math.round(winH * 0.7) }
+                : styles.sheetFull,
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{label}</Text>
+              <Pressable onPress={() => setOpen(false)} hitSlop={12}>
+                <Text style={{ color: colors.accent, fontSize: 16 }}>Close</Text>
               </Pressable>
-            )}
-            ListEmptyComponent={
-              <Text style={{ color: colors.textDim, padding: spacing.lg, textAlign: 'center' }}>
-                No matches
-              </Text>
-            }
-          />
-        </View>
+            </View>
+            <TextInput
+              style={styles.search}
+              placeholder="Search…"
+              placeholderTextColor={colors.textDim}
+              value={query}
+              onChangeText={setQuery}
+              autoFocus
+            />
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => item}
+              keyboardShouldPersistTaps="handled"
+              style={wide ? styles.listWide : styles.listFull}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={({ pressed }) => [styles.option, pressed && { opacity: 0.6 }]}
+                  onPress={() => {
+                    onSelect(item);
+                    setOpen(false);
+                  }}
+                >
+                  <Text style={styles.optionText}>{item}</Text>
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                <Text style={{ color: colors.textDim, padding: spacing.lg, textAlign: 'center' }}>
+                  No matches
+                </Text>
+              }
+            />
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -246,7 +266,19 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
-  modal: { flex: 1, backgroundColor: colors.bg, paddingTop: 56 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.55)' },
+  backdropWide: { alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  sheet: {
+    backgroundColor: colors.bg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    overflow: 'hidden',
+    paddingTop: spacing.md,
+  },
+  sheetFull: { flex: 1, width: '100%', borderRadius: 0, borderWidth: 0, paddingTop: 56 },
+  listWide: { flexGrow: 0, flexShrink: 1 },
+  listFull: { flex: 1 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
