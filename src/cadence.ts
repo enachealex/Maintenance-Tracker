@@ -15,18 +15,32 @@ const FIXED_DAYS: Record<Exclude<MileageCadence, 'custom'>, number> = {
   monthly: 30,
 };
 
-/** Number of days between mileage-update prompts for a vehicle. */
+/** Days between reminders for any cadence value. */
+export function daysForCadence(cadence: MileageCadence, customDays: number): number {
+  if (cadence === 'custom') return Math.max(1, customDays || 30);
+  return FIXED_DAYS[cadence];
+}
+
+export function labelForCadence(cadence: MileageCadence, customDays: number): string {
+  if (cadence === 'custom') {
+    const d = daysForCadence(cadence, customDays);
+    return d === 1 ? 'every day' : `every ${d} days`;
+  }
+  return CADENCE_OPTIONS.find((o) => o.key === cadence)!.label.toLowerCase();
+}
+
+/** Days between mileage-update prompts for a vehicle. */
 export function cadenceDays(rec: VehicleRecord): number {
-  if (rec.mileageCadence === 'custom') return Math.max(1, rec.mileageCustomDays || 30);
-  return FIXED_DAYS[rec.mileageCadence];
+  return daysForCadence(rec.mileageCadence, rec.mileageCustomDays);
+}
+
+/** Days between "maintenance due" reminders for a vehicle. */
+export function maintenanceCadenceDays(rec: VehicleRecord): number {
+  return daysForCadence(rec.maintenanceCadence ?? 'weekly', rec.maintenanceCustomDays ?? 7);
 }
 
 export function cadenceLabel(rec: VehicleRecord): string {
-  if (rec.mileageCadence === 'custom') {
-    const d = cadenceDays(rec);
-    return d === 1 ? 'every day' : `every ${d} days`;
-  }
-  return CADENCE_OPTIONS.find((o) => o.key === rec.mileageCadence)!.label.toLowerCase();
+  return labelForCadence(rec.mileageCadence, rec.mileageCustomDays);
 }
 
 export function daysSinceMileageUpdate(rec: VehicleRecord, now = Date.now()): number {

@@ -22,7 +22,7 @@ export interface TaskState {
   history: { mileage: number; date: string }[];
 }
 
-/** How often the user wants to be prompted to refresh their odometer reading. */
+/** Reminder frequency (used for both mileage prompts and maintenance reminders). */
 export type MileageCadence = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
 
 /** One saved vehicle plus everything tracked about it. */
@@ -35,6 +35,9 @@ export interface VehicleRecord {
   mileageCadence: MileageCadence;
   /** Days between mileage prompts when cadence === 'custom'. */
   mileageCustomDays: number;
+  /** How often to re-remind about maintenance that's due. */
+  maintenanceCadence: MileageCadence;
+  maintenanceCustomDays: number;
   /** User-defined maintenance items, tracked alongside the standard schedule. */
   customItems: ScheduleItem[];
   createdAt: string;

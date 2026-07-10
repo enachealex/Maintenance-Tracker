@@ -9,8 +9,8 @@ import {
   View,
 } from 'react-native';
 import { computeTasks, fmtMiles, isCustomItem, vehicleName } from '../logic';
-import { CADENCE_OPTIONS, cadenceLabel, daysSinceMileageUpdate, isMileageStale } from '../cadence';
-import { Button, Card, Field } from '../components/ui';
+import { CADENCE_OPTIONS, daysSinceMileageUpdate, isMileageStale } from '../cadence';
+import { Button, Card, Field, SelectField } from '../components/ui';
 import { colors, spacing } from '../theme';
 import { ComputedTask, MileageCadence, VehicleRecord } from '../types';
 
@@ -20,6 +20,7 @@ export default function Dashboard({
   onCompleteTask,
   onUpdateMileage,
   onSetCadence,
+  onSetMaintenanceCadence,
   onAddCustomItem,
   onRemoveCustomItem,
   onBack,
@@ -30,6 +31,7 @@ export default function Dashboard({
   onCompleteTask: (itemId: string) => void;
   onUpdateMileage: (mileage: number) => void;
   onSetCadence: (cadence: MileageCadence, customDays: number) => void;
+  onSetMaintenanceCadence: (cadence: MileageCadence, customDays: number) => void;
   onAddCustomItem: (fields: { name: string; intervalMiles: number; milesAgo: number | null }) => void;
   onRemoveCustomItem: (itemId: string) => void;
   onBack: () => void;
@@ -43,6 +45,7 @@ export default function Dashboard({
   const [editingMileage, setEditingMileage] = useState(!!startEditingMileage);
   const [mileageText, setMileageText] = useState('');
   const [customDaysText, setCustomDaysText] = useState(String(rec.mileageCustomDays));
+  const [maintDaysText, setMaintDaysText] = useState(String(rec.maintenanceCustomDays ?? 7));
   const [addingCustom, setAddingCustom] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customInterval, setCustomInterval] = useState('');
@@ -84,9 +87,22 @@ export default function Dashboard({
     }
   };
 
+  const keyForLabel = (label: string): MileageCadence =>
+    CADENCE_OPTIONS.find((o) => o.label === label)!.key;
+
+  const displayCadence = (cadence: MileageCadence, days: number) =>
+    cadence === 'custom'
+      ? `Custom (every ${Math.max(1, days)} day${days === 1 ? '' : 's'})`
+      : CADENCE_OPTIONS.find((o) => o.key === cadence)!.label;
+
   const chooseCadence = (cadence: MileageCadence) => {
     const days = parseInt(customDaysText.replace(/[^0-9]/g, ''), 10) || rec.mileageCustomDays;
     onSetCadence(cadence, days);
+  };
+
+  const chooseMaintCadence = (cadence: MileageCadence) => {
+    const days = parseInt(maintDaysText.replace(/[^0-9]/g, ''), 10) || rec.maintenanceCustomDays || 7;
+    onSetMaintenanceCadence(cadence, days);
   };
 
   const saveCustomItem = () => {
@@ -168,38 +184,50 @@ export default function Dashboard({
       )}
 
       <Card>
-        <Text style={styles.cadenceLabel}>Remind me to update mileage</Text>
-        <View style={styles.chipRow}>
-          {CADENCE_OPTIONS.map((o) => (
-            <Pressable
-              key={o.key}
-              onPress={() => chooseCadence(o.key)}
-              style={[styles.chip, rec.mileageCadence === o.key && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, rec.mileageCadence === o.key && styles.chipTextActive]}>
-                {o.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Text style={styles.cadenceLabel}>🔔 Reminder frequency</Text>
+        <SelectField
+          label="Remind me to update mileage"
+          value={displayCadence(rec.mileageCadence, rec.mileageCustomDays)}
+          placeholder="Choose frequency"
+          options={CADENCE_OPTIONS.map((o) => o.label)}
+          onSelect={(label) => chooseCadence(keyForLabel(label))}
+        />
         {rec.mileageCadence === 'custom' && (
-          <View style={{ marginTop: spacing.md }}>
-            <Field
-              label="Every how many days?"
-              value={customDaysText}
-              onChangeText={(t) => {
-                setCustomDaysText(t);
-                const d = parseInt(t.replace(/[^0-9]/g, ''), 10);
-                if (d > 0) onSetCadence('custom', d);
-              }}
-              placeholder="e.g. 10"
-              keyboardType="numeric"
-            />
-          </View>
+          <Field
+            label="Mileage reminder: every how many days?"
+            value={customDaysText}
+            onChangeText={(t) => {
+              setCustomDaysText(t);
+              const d = parseInt(t.replace(/[^0-9]/g, ''), 10);
+              if (d > 0) onSetCadence('custom', d);
+            }}
+            placeholder="e.g. 10"
+            keyboardType="numeric"
+          />
+        )}
+        <SelectField
+          label="Remind me about due maintenance"
+          value={displayCadence(rec.maintenanceCadence ?? 'weekly', rec.maintenanceCustomDays ?? 7)}
+          placeholder="Choose frequency"
+          options={CADENCE_OPTIONS.map((o) => o.label)}
+          onSelect={(label) => chooseMaintCadence(keyForLabel(label))}
+        />
+        {rec.maintenanceCadence === 'custom' && (
+          <Field
+            label="Maintenance reminder: every how many days?"
+            value={maintDaysText}
+            onChangeText={(t) => {
+              setMaintDaysText(t);
+              const d = parseInt(t.replace(/[^0-9]/g, ''), 10);
+              if (d > 0) onSetMaintenanceCadence('custom', d);
+            }}
+            placeholder="e.g. 3"
+            keyboardType="numeric"
+          />
         )}
         <Text style={styles.cadenceHint}>
-          Currently: {cadenceLabel(rec)}. Once the reading is older than this, you'll get a
-          reminder — tap it to update, or update right here.
+          You'll be reminded at most this often — mileage prompts when the reading goes stale,
+          maintenance reminders while items are due. Tap a reminder to jump straight here.
         </Text>
       </Card>
 
@@ -399,18 +427,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   cadenceLabel: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.sm },
-  cadenceHint: { color: colors.textDim, fontSize: 12, marginTop: spacing.sm },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  chipActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-  chipText: { color: colors.textDim, fontSize: 14 },
-  chipTextActive: { color: colors.text, fontWeight: '600' },
+  cadenceHint: { color: colors.textDim, fontSize: 12 },
   notice: { color: colors.textDim, fontSize: 13, marginBottom: spacing.md, textAlign: 'center' },
   sectionTitle: {
     color: colors.text,

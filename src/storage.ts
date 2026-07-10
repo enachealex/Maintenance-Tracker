@@ -22,6 +22,8 @@ export function newVehicleRecord(fields: Partial<VehicleRecord> & Pick<VehicleRe
     tasks: {},
     mileageCadence: 'monthly',
     mileageCustomDays: 30,
+    maintenanceCadence: 'weekly',
+    maintenanceCustomDays: 7,
     customItems: [],
     createdAt: new Date().toISOString(),
     ...fields,
@@ -38,8 +40,13 @@ function migrate(parsed: any): AppData {
     return {
       ...DEFAULT_DATA,
       ...parsed,
-      // vehicles saved before customItems existed need the default filled in
-      vehicles: parsed.vehicles.map((v: any) => ({ customItems: [], ...v })),
+      // vehicles saved before newer fields existed need the defaults filled in
+      vehicles: parsed.vehicles.map((v: any) => ({
+        customItems: [],
+        maintenanceCadence: 'weekly',
+        maintenanceCustomDays: 7,
+        ...v,
+      })),
       schemaVersion: SCHEMA_VERSION,
     };
   }

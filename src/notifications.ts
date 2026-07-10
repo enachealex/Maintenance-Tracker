@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { AppData, VehicleRecord } from './types';
 import { dueTasks, fmtMiles, vehicleName } from './logic';
-import { cadenceDays, cadenceLabel } from './cadence';
+import { cadenceDays, cadenceLabel, maintenanceCadenceDays } from './cadence';
 
 const supported = Platform.OS !== 'web';
 
@@ -61,6 +61,31 @@ export async function syncAllReminders(data: AppData): Promise<void> {
   for (const rec of data.vehicles) {
     const label = vehicleName(rec);
 
+    // Maintenance reminders repeat at the vehicle's chosen frequency.
+    // Daily/weekly use calendar triggers (fixed clock time, no drift);
+    // longer frequencies use an interval, which restarts when reminders
+    // re-sync — best effort on native, exact on the web/PWA path.
+    const maintDays = maintenanceCadenceDays(rec);
+    const maintTrigger: Notifications.NotificationTriggerInput =
+      maintDays === 1
+        ? {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour: data.reminderHour,
+            minute: 0,
+          }
+        : maintDays === 7
+          ? {
+              type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+              weekday,
+              hour: data.reminderHour,
+              minute: 0,
+            }
+          : {
+              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+              seconds: maintDays * 86_400,
+              repeats: true,
+            };
+
     for (const task of dueTasks(rec)) {
       const overdueText =
         task.milesOverdue >= 0
@@ -73,12 +98,7 @@ export async function syncAllReminders(data: AppData): Promise<void> {
           data: { vehicleId: rec.id, kind: 'maintenance' } satisfies NotificationTap,
           ...androidChannel,
         },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-          weekday,
-          hour: data.reminderHour,
-          minute: 0,
-        },
+        trigger: maintTrigger,
       });
     }
 

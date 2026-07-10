@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { AppData } from './types';
 import { dueCount, vehicleName } from './logic';
-import { cadenceDays } from './cadence';
+import { cadenceDays, maintenanceCadenceDays } from './cadence';
 import { PUSH_SERVER_URL, VAPID_PUBLIC_KEY } from './pushConfig';
 
 /**
@@ -78,6 +78,7 @@ function buildSnapshot(data: AppData) {
       due: dueCount(v),
       mileageUpdatedAt: v.mileageUpdatedAt,
       cadenceDays: cadenceDays(v),
+      maintenanceCadenceDays: maintenanceCadenceDays(v),
     })),
     savedAt: Date.now(),
   };

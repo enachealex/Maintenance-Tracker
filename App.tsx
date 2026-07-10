@@ -174,6 +174,13 @@ export default function App() {
           onSetCadence={(cadence: MileageCadence, customDays: number) =>
             updateVehicle(rec.id, (r) => ({ ...r, mileageCadence: cadence, mileageCustomDays: customDays }))
           }
+          onSetMaintenanceCadence={(cadence: MileageCadence, customDays: number) =>
+            updateVehicle(rec.id, (r) => ({
+              ...r,
+              maintenanceCadence: cadence,
+              maintenanceCustomDays: customDays,
+            }))
+          }
           onAddCustomItem={(fields) => updateVehicle(rec.id, (r) => addCustomItem(r, fields))}
           onRemoveCustomItem={(itemId) => updateVehicle(rec.id, (r) => removeCustomItem(r, itemId))}
           onBack={() => setNav({ screen: 'home' })}
