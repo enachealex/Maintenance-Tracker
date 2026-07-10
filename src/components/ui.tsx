@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -102,6 +102,9 @@ export function SelectField({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  // Keyboard/hover-highlighted option; Enter selects it.
+  const [highlight, setHighlight] = useState(0);
+  const listRef = useRef<FlatList<string>>(null);
   const { width: winW, height: winH } = useWindowDimensions();
   // On wide (desktop) viewports the options open as a centered dialog card
   // instead of taking over the whole page; phones keep the full-screen picker.
@@ -112,6 +115,36 @@ export function SelectField({
     return q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
   }, [options, query]);
 
+  const pick = (item: string) => {
+    onSelect(item);
+    setOpen(false);
+  };
+
+  const moveHighlight = (delta: number) => {
+    setHighlight((h) => {
+      const next = Math.max(0, Math.min(h + delta, filtered.length - 1));
+      listRef.current?.scrollToIndex({ index: next, viewPosition: 0.5 });
+      return next;
+    });
+  };
+
+  /** Arrow keys move the highlight, Enter picks it, Escape closes. */
+  const handleKey = (e: any) => {
+    const key = e?.nativeEvent?.key;
+    if (key === 'ArrowDown') {
+      e.preventDefault?.();
+      moveHighlight(1);
+    } else if (key === 'ArrowUp') {
+      e.preventDefault?.();
+      moveHighlight(-1);
+    } else if (key === 'Enter') {
+      const item = filtered[Math.min(highlight, filtered.length - 1)];
+      if (item) pick(item);
+    } else if (key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
   return (
     <View style={{ marginBottom: spacing.md }}>
       <Text style={styles.label}>{label}</Text>
@@ -120,6 +153,7 @@ export function SelectField({
         disabled={disabled || loading}
         onPress={() => {
           setQuery('');
+          setHighlight(0);
           setOpen(true);
         }}
       >
@@ -166,23 +200,37 @@ export function SelectField({
               placeholder="Search…"
               placeholderTextColor={colors.textDim}
               value={query}
-              onChangeText={setQuery}
+              onChangeText={(t) => {
+                setQuery(t);
+                setHighlight(0);
+              }}
+              onKeyPress={handleKey}
               autoFocus
             />
             <FlatList
+              ref={listRef}
               data={filtered}
+              extraData={highlight}
               keyExtractor={(item) => item}
               keyboardShouldPersistTaps="handled"
               style={wide ? styles.listWide : styles.listFull}
               // keep the last options tappable above the floating Close button
               contentContainerStyle={!wide && { paddingBottom: 96 }}
-              renderItem={({ item }) => (
+              // fixed row height so keyboard navigation can scroll to any index
+              getItemLayout={(_, index) => ({
+                length: OPTION_HEIGHT,
+                offset: OPTION_HEIGHT * index,
+                index,
+              })}
+              renderItem={({ item, index }) => (
                 <Pressable
-                  style={({ pressed }) => [styles.option, pressed && { opacity: 0.6 }]}
-                  onPress={() => {
-                    onSelect(item);
-                    setOpen(false);
-                  }}
+                  style={({ pressed }) => [
+                    styles.option,
+                    index === highlight && styles.optionHighlight,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  onHoverIn={() => setHighlight(index)}
+                  onPress={() => pick(item)}
                 >
                   <Text style={styles.optionText}>{item}</Text>
                 </Pressable>
@@ -236,6 +284,9 @@ export function Field({
     </View>
   );
 }
+
+/** Fixed option-row height, required for keyboard-nav scrollToIndex. */
+const OPTION_HEIGHT = 48;
 
 const styles = StyleSheet.create({
   screenBg: { flex: 1, backgroundColor: colors.bg },
@@ -334,10 +385,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   option: {
-    paddingVertical: 14,
+    height: OPTION_HEIGHT,
+    justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
+  optionHighlight: { backgroundColor: colors.accentSoft },
   optionText: { color: colors.text, fontSize: 16 },
 });
