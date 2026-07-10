@@ -295,7 +295,13 @@ const styles = StyleSheet.create({
   closeFab: {
     position: 'absolute',
     right: spacing.lg,
-    bottom: spacing.lg,
+    // Hug the bottom of the viewport, which ends at the Android control bar.
+    // On edge-to-edge (gesture nav) devices the safe-area inset lifts the
+    // button so it sits right on top of the bar instead of underneath it.
+    bottom:
+      Platform.OS === 'web'
+        ? ('calc(env(safe-area-inset-bottom, 0px) + 8px)' as unknown as number)
+        : spacing.sm,
     backgroundColor: colors.accent,
     borderRadius: 999,
     paddingVertical: 14,
