@@ -1,6 +1,6 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Button, Card } from '../components/ui';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Button, Card, Screen } from '../components/ui';
 import NotificationPrompt from '../components/NotificationPrompt';
 import { colors, spacing } from '../theme';
 import { dueCount, fmtMiles, vehicleName } from '../logic';
@@ -21,11 +21,12 @@ export default function Home({
   onSendTestReminder: () => void;
 }) {
   const totalDue = vehicles.reduce((sum, v) => sum + dueCount(v), 0);
+  const wide = useWindowDimensions().width >= 768;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.h1}>🚗 My Garage</Text>
-      <Text style={styles.sub}>
+    <Screen>
+      <Text style={[styles.h1, wide && styles.centered]}>🚗 My Garage</Text>
+      <Text style={[styles.sub, wide && styles.centered]}>
         {vehicles.length === 0
           ? 'Add your first vehicle to start tracking maintenance.'
           : `${vehicles.length} vehicle${vehicles.length > 1 ? 's' : ''} · ${
@@ -48,9 +49,11 @@ export default function Home({
         ))
       )}
 
-      <Button title="＋ Add vehicle" onPress={onAddVehicle} />
+      <View style={wide && styles.centerRow}>
+        <Button title="＋ Add vehicle" onPress={onAddVehicle} />
+      </View>
       <View style={{ height: spacing.xl }} />
-    </ScrollView>
+    </Screen>
   );
 }
 
@@ -94,10 +97,10 @@ function VehicleCard({ rec, onPress }: { rec: VehicleRecord; onPress: () => void
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, paddingTop: 64 },
   h1: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: spacing.xs },
   sub: { color: colors.textDim, fontSize: 15, marginBottom: spacing.lg },
+  centered: { textAlign: 'center' },
+  centerRow: { alignItems: 'center' },
   emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyEmoji: { fontSize: 40, marginBottom: spacing.sm },
   emptyText: { color: colors.textDim, fontSize: 15 },

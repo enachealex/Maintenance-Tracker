@@ -5,12 +5,34 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { colors, spacing } from '../theme';
+
+/**
+ * Scrolling screen container. On wide (desktop web) viewports the content is
+ * constrained to a centered column instead of stretching edge to edge.
+ */
+export function Screen({
+  children,
+  topPadding = 64,
+}: {
+  children: React.ReactNode;
+  topPadding?: number;
+}) {
+  return (
+    <ScrollView
+      style={styles.screenBg}
+      contentContainerStyle={[styles.screenContent, { paddingTop: topPadding }]}
+    >
+      <View style={styles.screenColumn}>{children}</View>
+    </ScrollView>
+  );
+}
 
 export function Button({
   title,
@@ -183,6 +205,9 @@ export function Field({
 }
 
 const styles = StyleSheet.create({
+  screenBg: { flex: 1, backgroundColor: colors.bg },
+  screenContent: { padding: spacing.md },
+  screenColumn: { width: '100%', maxWidth: 900, alignSelf: 'center' },
   button: {
     borderRadius: 12,
     paddingVertical: 14,

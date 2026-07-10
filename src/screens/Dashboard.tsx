@@ -1,16 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { computeTasks, fmtMiles, isCustomItem, vehicleName } from '../logic';
 import { CADENCE_OPTIONS, daysSinceMileageUpdate, isMileageStale } from '../cadence';
-import { Button, Card, Field, SelectField } from '../components/ui';
+import { Button, Card, Field, Screen, SelectField } from '../components/ui';
 import { colors, spacing } from '../theme';
 import { ComputedTask, MileageCadence, VehicleRecord } from '../types';
 
@@ -124,7 +116,7 @@ export default function Dashboard({
     );
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <Screen topPadding={56}>
       <Pressable onPress={onBack} hitSlop={8} style={styles.backRow}>
         <Text style={styles.back}>‹ Garage</Text>
       </Pressable>
@@ -334,7 +326,7 @@ export default function Dashboard({
         }
       />
       <View style={{ height: spacing.xl }} />
-    </ScrollView>
+    </Screen>
   );
 }
 
@@ -409,8 +401,6 @@ function TaskRow({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, paddingTop: 56 },
   backRow: { marginBottom: spacing.sm },
   back: { color: colors.accent, fontSize: 16, fontWeight: '600' },
   h1: { color: colors.text, fontSize: 24, fontWeight: '800' },

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SCHEDULE } from '../data/schedule';
-import { Button, Card, Field } from '../components/ui';
+import { Button, Card, Field, Screen } from '../components/ui';
 import { colors, spacing } from '../theme';
 import { ScheduleItem, Vehicle } from '../types';
 
@@ -60,7 +60,7 @@ export default function MileageSetup({
 
   if (step === 'mileage') {
     return (
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Screen>
         <Text style={styles.h1}>🧭 Current mileage</Text>
         <Text style={styles.sub}>
           {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.trim} · {vehicle.engine}
@@ -82,12 +82,12 @@ export default function MileageSetup({
             else onDone({ mileage, answers: {} });
           }}
         />
-      </ScrollView>
+      </Screen>
     );
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <Screen>
       <Text style={styles.h1}>🗒️ Service history</Text>
       <Text style={styles.sub}>
         At {mileage.toLocaleString()} miles these services were already due at least once.
@@ -111,7 +111,7 @@ export default function MileageSetup({
         onPress={() => onDone({ mileage, answers: buildAnswers() })}
       />
       <View style={{ height: spacing.xl }} />
-    </ScrollView>
+    </Screen>
   );
 }
 
@@ -168,8 +168,6 @@ function HistoryQuestion({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, paddingTop: 64 },
   h1: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: spacing.xs },
   sub: { color: colors.textDim, fontSize: 15, marginBottom: spacing.lg },
   itemName: { color: colors.text, fontSize: 16, fontWeight: '700' },

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { getMakes, getModels, getTrims, getYears, MakeInfo, TrimInfo } from '../api/vehicles';
-import { Button, Card, Field, SelectField } from '../components/ui';
+import { Button, Card, Field, Screen, SelectField } from '../components/ui';
 import { colors, spacing } from '../theme';
 import { Vehicle } from '../types';
 
@@ -92,7 +92,7 @@ export default function VehicleSetup({
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.md, paddingTop: 56 }}>
+    <Screen topPadding={56}>
       {onCancel && (
         <Pressable onPress={onCancel} hitSlop={8} style={{ marginBottom: spacing.sm }}>
           <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>‹ Garage</Text>
@@ -177,12 +177,11 @@ export default function VehicleSetup({
 
       <Button title="Continue" onPress={submit} disabled={!complete} />
       <View style={{ height: spacing.xl }} />
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
   h1: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: spacing.xs },
   sub: { color: colors.textDim, fontSize: 15, marginBottom: spacing.lg },
   error: { color: colors.danger, marginBottom: spacing.md, textAlign: 'center' },
