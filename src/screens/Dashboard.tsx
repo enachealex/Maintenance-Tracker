@@ -1,16 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { computeTasks, fmtMiles, isCustomItem, vehicleName } from '../logic';
+import { OIL_TYPES, computeTasks, fmtMiles, isCustomItem, oilTypeOf, vehicleName } from '../logic';
 import { CADENCE_OPTIONS, daysSinceMileageUpdate, isMileageStale } from '../cadence';
 import { Button, Card, Field, Screen, SelectField } from '../components/ui';
 import { colors, spacing } from '../theme';
-import { ComputedTask, MileageCadence, VehicleRecord } from '../types';
+import { ComputedTask, MileageCadence, OilType, VehicleRecord } from '../types';
+
+const OIL_TYPE_KEYS: OilType[] = ['synthetic-blend', 'full-synthetic'];
+const oilTypeLabel = (t: OilType) =>
+  `${OIL_TYPES[t].label} — every ${OIL_TYPES[t].intervalMiles.toLocaleString()} mi`;
 
 export default function Dashboard({
   rec,
   startEditingMileage,
   onCompleteTask,
   onUpdateMileage,
+  onEditLastDone,
+  onSetOilType,
   onSetCadence,
   onSetMaintenanceCadence,
   onAddCustomItem,
@@ -22,6 +28,8 @@ export default function Dashboard({
   startEditingMileage?: boolean;
   onCompleteTask: (itemId: string) => void;
   onUpdateMileage: (mileage: number) => void;
+  onEditLastDone: (itemId: string, mileage: number | null) => void;
+  onSetOilType: (oilType: OilType) => void;
   onSetCadence: (cadence: MileageCadence, customDays: number) => void;
   onSetMaintenanceCadence: (cadence: MileageCadence, customDays: number) => void;
   onAddCustomItem: (fields: { name: string; intervalMiles: number; milesAgo: number | null }) => void;
@@ -78,6 +86,10 @@ export default function Dashboard({
       setEditingMileage(false);
     }
   };
+
+  // A service can't have been done at a higher reading than the odometer shows.
+  const editLastDone = (itemId: string, mileage: number | null) =>
+    onEditLastDone(itemId, mileage == null ? null : Math.min(mileage, rec.currentMileage));
 
   const keyForLabel = (label: string): MileageCadence =>
     CADENCE_OPTIONS.find((o) => o.label === label)!.key;
@@ -223,6 +235,21 @@ export default function Dashboard({
         </Text>
       </Card>
 
+      <Card>
+        <Text style={styles.cadenceLabel}>🛢️ Engine oil</Text>
+        <SelectField
+          label="Oil type"
+          value={oilTypeLabel(oilTypeOf(rec))}
+          placeholder="Choose oil type"
+          options={OIL_TYPE_KEYS.map(oilTypeLabel)}
+          onSelect={(label) => onSetOilType(OIL_TYPE_KEYS.find((k) => oilTypeLabel(k) === label)!)}
+        />
+        <Text style={styles.cadenceHint}>
+          Sets how often the oil-change reminder comes due. Check your last oil-change sticker or
+          receipt if you're not sure which oil was used.
+        </Text>
+      </Card>
+
       {overdue.length + dueSoon.length > 0 ? (
         <Text style={styles.notice}>
           🔔 You'll get a weekly reminder for each item below until you check it off.
@@ -237,6 +264,7 @@ export default function Dashboard({
             key={t.item.id}
             task={t}
             onComplete={() => confirmComplete(t)}
+            onEditLastDone={(m) => editLastDone(t.item.id, m)}
             onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
           />
         ))}
@@ -248,6 +276,7 @@ export default function Dashboard({
             key={t.item.id}
             task={t}
             onComplete={() => confirmComplete(t)}
+            onEditLastDone={(m) => editLastDone(t.item.id, m)}
             onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
           />
         ))}
@@ -259,6 +288,7 @@ export default function Dashboard({
             key={t.item.id}
             task={t}
             onComplete={() => confirmComplete(t)}
+            onEditLastDone={(m) => editLastDone(t.item.id, m)}
             onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
           />
         ))}
@@ -352,19 +382,34 @@ function Section({
 function TaskRow({
   task,
   onComplete,
+  onEditLastDone,
   onRemove,
 }: {
   task: ComputedTask;
   onComplete: () => void;
+  onEditLastDone: (mileage: number | null) => void;
   onRemove?: () => void;
 }) {
   const { item, status, nextDueMileage, milesOverdue, state } = task;
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
   const badge =
     status === 'overdue'
       ? { text: `${fmtMiles(milesOverdue)} overdue`, color: colors.danger, bg: colors.dangerSoft }
       : status === 'due-soon'
         ? { text: `due in ${fmtMiles(-milesOverdue)}`, color: colors.warn, bg: colors.warnSoft }
         : { text: `due at ${fmtMiles(nextDueMileage)}`, color: colors.ok, bg: colors.okSoft };
+
+  const startEdit = () => {
+    setEditText(state.lastDoneMileage != null ? String(state.lastDoneMileage) : '');
+    setEditing(true);
+  };
+
+  const saveEdit = () => {
+    const digits = editText.replace(/[^0-9]/g, '');
+    onEditLastDone(digits === '' ? null : parseInt(digits, 10));
+    setEditing(false);
+  };
 
   return (
     <Card style={{ marginBottom: spacing.sm }}>
@@ -373,12 +418,15 @@ function TaskRow({
           <Text style={styles.taskName}>
             {item.icon} {item.name}
           </Text>
-          <Text style={styles.taskMeta}>
-            every {item.intervalMiles.toLocaleString()} mi
-            {state.lastDoneMileage != null
-              ? ` · last done at ${fmtMiles(state.lastDoneMileage)}`
-              : ' · no record yet'}
-          </Text>
+          <Pressable onPress={startEdit} hitSlop={4}>
+            <Text style={styles.taskMeta}>
+              every {item.intervalMiles.toLocaleString()} mi
+              {state.lastDoneMileage != null
+                ? ` · last done at ${fmtMiles(state.lastDoneMileage)}`
+                : ' · no record yet'}
+              <Text style={styles.editLink}> ✎ edit</Text>
+            </Text>
+          </Pressable>
           <View style={[styles.badge, { backgroundColor: badge.bg }]}>
             <Text style={{ color: badge.color, fontSize: 12, fontWeight: '700' }}>
               {badge.text}
@@ -396,6 +444,25 @@ function TaskRow({
           </Pressable>
         )}
       </View>
+      {editing && (
+        <View style={styles.editBox}>
+          <Field
+            label="Odometer when this was last done (blank = never / no record)"
+            value={editText}
+            onChangeText={setEditText}
+            placeholder="e.g. 52000"
+            keyboardType="numeric"
+          />
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <View style={{ flex: 1 }}>
+              <Button title="Cancel" variant="ghost" onPress={() => setEditing(false)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button title="Save" onPress={saveEdit} />
+            </View>
+          </View>
+        </View>
+      )}
     </Card>
   );
 }
@@ -429,6 +496,13 @@ const styles = StyleSheet.create({
   emptyText: { color: colors.textDim, fontSize: 14 },
   taskName: { color: colors.text, fontSize: 16, fontWeight: '700' },
   taskMeta: { color: colors.textDim, fontSize: 13, marginTop: 2, marginBottom: 6 },
+  editLink: { color: colors.accent, fontSize: 12, fontWeight: '600' },
+  editBox: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+  },
   badge: {
     alignSelf: 'flex-start',
     borderRadius: 999,

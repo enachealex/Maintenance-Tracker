@@ -53,12 +53,30 @@ async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
   return registration;
 }
 
+/**
+ * Ask the browser to protect this origin's storage from eviction. Every
+ * vehicle and its service history lives only on-device, so eviction under
+ * storage pressure would silently wipe the user's data. Browsers are far more
+ * likely to grant this once notification permission is granted or the PWA is
+ * installed; safe to call repeatedly.
+ */
+export async function requestPersistentStorage(): Promise<void> {
+  if (!isWeb || typeof navigator === 'undefined') return;
+  try {
+    await navigator.storage?.persist?.();
+  } catch {
+    /* unsupported */
+  }
+}
+
 /** Request permission. Must be called from a user gesture (tap). */
 export async function requestPermission(): Promise<PermState> {
   if (!canNotify()) return 'unsupported';
   await registerServiceWorker();
   try {
-    return (await Notification.requestPermission()) as PermState;
+    const result = (await Notification.requestPermission()) as PermState;
+    if (result === 'granted') await requestPersistentStorage();
+    return result;
   } catch {
     return getPermission();
   }

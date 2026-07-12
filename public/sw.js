@@ -1,6 +1,7 @@
 /* Maintenance Tracker service worker.
- * Handles: notification taps (with deep links), offline background reminders
- * (Periodic Background Sync, Android/Chrome), and server-sent Web Push.
+ * Handles: offline app-shell caching, notification taps (with deep links),
+ * offline background reminders (Periodic Background Sync, Android/Chrome),
+ * and server-sent Web Push.
  *
  * The app writes a snapshot into the Cache API with, per vehicle: the due
  * item count, when the odometer was last updated, and the user's two chosen
@@ -19,8 +20,102 @@ const SNAPSHOT_URL = '/snapshot.json';
 const STATE_URL = '/notify-state.json';
 const DAY_MS = 86400000;
 
+/* ---- Offline app shell ----------------------------------------------------
+ * The whole app is static files + on-device data, so caching the shell makes
+ * it work fully offline (except the add-vehicle pickers, which need the
+ * NHTSA/EPA APIs — cross-origin requests are left untouched below):
+ *  - navigations: network-first, cached copy when offline;
+ *  - /_expo/static/ bundles: cache-first — Expo content-hashes the filenames,
+ *    so an entry never changes and a new build gets new URLs;
+ *  - icons/manifest: stale-while-revalidate.
+ * Assets are cached as they're first fetched (no precache manifest), so
+ * offline works from the first revisit onward. Dev-server bundle URLs match
+ * none of these patterns, so local development is never served stale code.
+ * Bump the version to drop previously cached shells. */
+const SHELL_CACHE = 'mt-shell-v1';
+const SWR_PATHS = [
+  '/favicon.ico',
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+];
+
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (event) =>
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names
+          .filter((n) => n.startsWith('mt-shell-') && n !== SHELL_CACHE)
+          .map((n) => caches.delete(n)),
+      );
+      await self.clients.claim();
+    })(),
+  ),
+);
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return; // APIs, push worker: network only
+
+  if (req.mode === 'navigate') {
+    event.respondWith(shellNetworkFirst(req));
+  } else if (url.pathname.startsWith('/_expo/static/') && !url.search) {
+    // Exported bundles are content-hashed and query-less; dev-server bundles
+    // always carry ?dev=… and must never be cached (stale code while coding).
+    event.respondWith(cacheFirst(req));
+  } else if (SWR_PATHS.includes(url.pathname)) {
+    event.respondWith(staleWhileRevalidate(req));
+  }
+});
+
+// Every navigation serves index.html, so all of them share the '/' cache key
+// (deep links like /?vehicle=… included).
+async function shellNetworkFirst(req) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const res = await fetch(req);
+    if (res.ok) cache.put('/', res.clone());
+    return res;
+  } catch (_) {
+    const cached = await cache.match('/');
+    return (
+      cached ||
+      new Response(
+        '<!doctype html><meta charset="utf-8"><title>Offline</title>' +
+          '<body style="background:#0F1420;color:#E7ECF5;font-family:sans-serif;text-align:center;padding-top:30vh">' +
+          "<h1>You're offline</h1><p>Connect once to load Maintenance Tracker, and it will work offline after that.</p>",
+        { status: 503, headers: { 'Content-Type': 'text/html' } },
+      )
+    );
+  }
+}
+
+async function cacheFirst(req) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(req);
+  if (cached) return cached;
+  const res = await fetch(req);
+  if (res.ok) cache.put(req, res.clone());
+  return res;
+}
+
+async function staleWhileRevalidate(req) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(req);
+  const refresh = fetch(req)
+    .then((res) => {
+      if (res.ok) cache.put(req, res.clone());
+      return res;
+    })
+    .catch(() => cached);
+  return cached || refresh;
+}
+/* ---- End offline app shell ---------------------------------------------- */
 
 // Open/focus the app on tap, honoring the notification's deep link.
 self.addEventListener('notificationclick', (event) => {

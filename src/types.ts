@@ -25,6 +25,9 @@ export interface TaskState {
 /** Reminder frequency (used for both mileage prompts and maintenance reminders). */
 export type MileageCadence = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
 
+/** Engine oil type — determines the oil-change interval. */
+export type OilType = 'synthetic-blend' | 'full-synthetic';
+
 /** One saved vehicle plus everything tracked about it. */
 export interface VehicleRecord {
   id: string;
@@ -40,6 +43,8 @@ export interface VehicleRecord {
   maintenanceCustomDays: number;
   /** User-defined maintenance items, tracked alongside the standard schedule. */
   customItems: ScheduleItem[];
+  /** Oil type; optional because it was added after launch (default synthetic-blend). */
+  oilType?: OilType;
   createdAt: string;
 }
 

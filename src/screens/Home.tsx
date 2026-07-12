@@ -13,12 +13,17 @@ export default function Home({
   onAddVehicle,
   onNotificationsEnabled,
   onSendTestReminder,
+  onExportBackup,
+  onImportBackup,
 }: {
   vehicles: VehicleRecord[];
   onOpenVehicle: (id: string) => void;
   onAddVehicle: () => void;
   onNotificationsEnabled: () => void;
   onSendTestReminder: () => void;
+  onExportBackup: () => void;
+  /** Absent on native, where there's no file picker. */
+  onImportBackup?: () => void;
 }) {
   const totalDue = vehicles.reduce((sum, v) => sum + dueCount(v), 0);
   const wide = useWindowDimensions().width >= 768;
@@ -52,6 +57,23 @@ export default function Home({
       <View style={wide && styles.centerRow}>
         <Button title="＋ Add vehicle" onPress={onAddVehicle} />
       </View>
+
+      {(vehicles.length > 0 || onImportBackup) && (
+        <View style={styles.backupBlock}>
+          <View style={[styles.backupRow, wide && styles.centerRow]}>
+            {vehicles.length > 0 && (
+              <Button title="Export backup" variant="ghost" onPress={onExportBackup} />
+            )}
+            {onImportBackup && (
+              <Button title="Import backup" variant="ghost" onPress={onImportBackup} />
+            )}
+          </View>
+          <Text style={styles.backupHint}>
+            Your data lives only on this device — export a backup to keep a copy or move to
+            another device.
+          </Text>
+        </View>
+      )}
       <View style={{ height: spacing.xl }} />
     </Screen>
   );
@@ -131,5 +153,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: spacing.sm,
     fontWeight: '600',
+  },
+  backupBlock: { marginTop: spacing.lg },
+  backupRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  backupHint: {
+    color: colors.textDim,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });

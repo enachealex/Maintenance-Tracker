@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SCHEDULE } from '../data/schedule';
+import { OIL_TYPES, scheduleFor } from '../logic';
 import { Button, Card, Field, Screen } from '../components/ui';
 import { colors, spacing } from '../theme';
-import { ScheduleItem, Vehicle } from '../types';
+import { OilType, ScheduleItem, Vehicle } from '../types';
 
 export type HistoryChoice = 'recent' | 'while-ago' | 'unknown';
 
@@ -15,8 +15,11 @@ export interface HistoryAnswer {
 
 export interface MileageSetupResult {
   mileage: number;
+  oilType: OilType;
   answers: Record<string, HistoryAnswer>;
 }
+
+const OIL_TYPE_KEYS: OilType[] = ['synthetic-blend', 'full-synthetic'];
 
 /**
  * Second onboarding step: current odometer reading, then a quick
@@ -32,16 +35,20 @@ export default function MileageSetup({
   onDone: (result: MileageSetupResult) => void;
 }) {
   const [mileageText, setMileageText] = useState('');
+  const [oilType, setOilType] = useState<OilType | null>(null);
   const [step, setStep] = useState<'mileage' | 'history'>('mileage');
   const [choices, setChoices] = useState<Record<string, HistoryChoice>>({});
   const [milesAgoText, setMilesAgoText] = useState<Record<string, string>>({});
 
   const mileage = parseInt(mileageText.replace(/[^0-9]/g, ''), 10) || 0;
 
+  // The chosen oil type sets the oil-change interval everywhere below.
+  const items = useMemo(() => scheduleFor(oilType ?? 'synthetic-blend'), [oilType]);
+
   // Only ask about services the car is old enough to have needed at least once.
   const relevant = useMemo(
-    () => SCHEDULE.filter((item) => mileage >= item.intervalMiles),
-    [mileage, step],
+    () => items.filter((item) => mileage >= item.intervalMiles),
+    [items, mileage, step],
   );
 
   const allAnswered = relevant.every((item) => choices[item.id]);
@@ -74,12 +81,34 @@ export default function MileageSetup({
             keyboardType="numeric"
           />
         </Card>
+        <Card>
+          <Text style={styles.itemName}>🛢️ Which engine oil does it use?</Text>
+          <Text style={styles.itemMeta}>This sets how often the oil change comes due.</Text>
+          <View style={styles.chipRow}>
+            {OIL_TYPE_KEYS.map((key) => (
+              <Pressable
+                key={key}
+                onPress={() => setOilType(key)}
+                style={[styles.chip, oilType === key && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, oilType === key && styles.chipTextActive]}>
+                  {OIL_TYPES[key].label} · every {OIL_TYPES[key].intervalMiles.toLocaleString()} mi
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.oilHint}>
+            Not sure? Check your last oil-change sticker or receipt — if you still can't tell,
+            Synthetic Blend is the safer guess.
+          </Text>
+        </Card>
         <Button
           title="Continue"
-          disabled={mileage <= 0}
+          disabled={mileage <= 0 || !oilType}
           onPress={() => {
-            if (SCHEDULE.some((i) => mileage >= i.intervalMiles)) setStep('history');
-            else onDone({ mileage, answers: {} });
+            if (!oilType) return;
+            if (items.some((i) => mileage >= i.intervalMiles)) setStep('history');
+            else onDone({ mileage, oilType, answers: {} });
           }}
         />
       </Screen>
@@ -107,8 +136,8 @@ export default function MileageSetup({
 
       <Button
         title="Build my checklist"
-        disabled={!allAnswered}
-        onPress={() => onDone({ mileage, answers: buildAnswers() })}
+        disabled={!allAnswered || !oilType}
+        onPress={() => oilType && onDone({ mileage, oilType, answers: buildAnswers() })}
       />
       <View style={{ height: spacing.xl }} />
     </Screen>
@@ -184,4 +213,5 @@ const styles = StyleSheet.create({
   chipText: { color: colors.textDim, fontSize: 14 },
   chipTextActive: { color: colors.text, fontWeight: '600' },
   milesAgoRow: { marginTop: spacing.md, marginBottom: -spacing.md },
+  oilHint: { color: colors.textDim, fontSize: 12, marginTop: spacing.sm },
 });

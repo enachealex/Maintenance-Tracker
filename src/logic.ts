@@ -1,6 +1,16 @@
 import { SCHEDULE } from './data/schedule';
 import { genId } from './storage';
-import { ComputedTask, ScheduleItem, TaskState, TaskStatus, VehicleRecord } from './types';
+import { ComputedTask, OilType, ScheduleItem, TaskState, TaskStatus, VehicleRecord } from './types';
+
+/** Oil-change interval by oil type. Synthetic Blend is the pre-oilType default. */
+export const OIL_TYPES: Record<OilType, { label: string; intervalMiles: number }> = {
+  'synthetic-blend': { label: 'Synthetic Blend', intervalMiles: 5000 },
+  'full-synthetic': { label: 'Full Synthetic', intervalMiles: 10000 },
+};
+
+export const DEFAULT_OIL_TYPE: OilType = 'synthetic-blend';
+
+export const oilTypeOf = (rec: VehicleRecord): OilType => rec.oilType ?? DEFAULT_OIL_TYPE;
 
 /** A task counts as "due soon" within this many miles of its due point. */
 const DUE_SOON_MILES = 500;
@@ -15,9 +25,18 @@ export function getTaskState(rec: VehicleRecord, itemId: string): TaskState {
   return rec.tasks[itemId] ?? emptyState();
 }
 
-/** Standard schedule plus the vehicle's user-defined custom items. */
+/** The standard schedule with the oil-change interval (and name) set by oil type. */
+export function scheduleFor(oilType: OilType): ScheduleItem[] {
+  return SCHEDULE.map((item) => {
+    if (item.id !== 'oil-change') return item;
+    const oil = OIL_TYPES[oilType];
+    return { ...item, name: `${item.name} (${oil.label})`, intervalMiles: oil.intervalMiles };
+  });
+}
+
+/** Standard schedule (adjusted for oil type) plus the vehicle's custom items. */
 export function itemsFor(rec: VehicleRecord): ScheduleItem[] {
-  return [...SCHEDULE, ...(rec.customItems ?? [])];
+  return [...scheduleFor(oilTypeOf(rec)), ...(rec.customItems ?? [])];
 }
 
 /**
@@ -60,6 +79,36 @@ export function completeTask(rec: VehicleRecord, itemId: string, mileage: number
         lastDoneMileage: mileage,
         lastDoneDate: entry.date,
         history: [...prev.history, entry],
+      },
+    },
+  };
+}
+
+/**
+ * Correct a task's last-done mileage (null = mark as never done / no record).
+ * When the latest history entry recorded the value being corrected, it is
+ * fixed too, so a mistaken check-off doesn't leave a wrong entry behind.
+ */
+export function editLastDoneMileage(
+  rec: VehicleRecord,
+  itemId: string,
+  mileage: number | null,
+): VehicleRecord {
+  const prev = getTaskState(rec, itemId);
+  const history = [...prev.history];
+  const last = history[history.length - 1];
+  if (mileage != null && last && last.mileage === prev.lastDoneMileage) {
+    history[history.length - 1] = { ...last, mileage };
+  }
+  return {
+    ...rec,
+    tasks: {
+      ...rec.tasks,
+      [itemId]: {
+        ...prev,
+        lastDoneMileage: mileage,
+        lastDoneDate: mileage == null ? null : prev.lastDoneDate,
+        history,
       },
     },
   };

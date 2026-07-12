@@ -2,18 +2,26 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/types';
-import { DEFAULT_DATA, loadData, newVehicleRecord, saveData } from './src/storage';
-import { addCustomItem, completeTask, removeCustomItem, setLastDone } from './src/logic';
+import { DEFAULT_DATA, loadData, newVehicleRecord, parseBackup, saveData } from './src/storage';
+import {
+  addCustomItem,
+  completeTask,
+  editLastDoneMileage,
+  removeCustomItem,
+  scheduleFor,
+  setLastDone,
+} from './src/logic';
 import { addNotificationResponseListener, syncAllReminders } from './src/notifications';
+import { BACKUP_IMPORT_SUPPORTED, exportBackup, pickBackupFile } from './src/backup';
 import {
   addWebNotificationTapListener,
   getInitialWebNav,
   registerServiceWorker,
+  requestPersistentStorage,
   sendTestReminder,
   syncWebReminders,
 } from './src/webNotifications';
 import { setupWebViewport } from './src/webViewport';
-import { SCHEDULE } from './src/data/schedule';
 import { colors } from './src/theme';
 import Home from './src/screens/Home';
 import VehicleSetup from './src/screens/VehicleSetup';
@@ -35,6 +43,7 @@ export default function App() {
   useEffect(() => {
     setupWebViewport(); // web: fill the usable screen (dvh + safe-area support)
     registerServiceWorker(); // web/PWA: enables offline background reminders + push
+    requestPersistentStorage(); // web: shield local data from storage eviction
     loadData().then((d) => {
       setData(d);
       saveData(d); // persist any schema migration so old-shape data is upgraded
@@ -81,6 +90,34 @@ export default function App() {
     if (dataRef.current) sendTestReminder(dataRef.current);
   }, []);
 
+  const handleExportBackup = useCallback(() => {
+    if (dataRef.current) exportBackup(dataRef.current);
+  }, []);
+
+  // Web only (pickBackupFile resolves null elsewhere), so window.confirm/alert
+  // — the same pattern Dashboard uses for its confirmations — are safe here.
+  const handleImportBackup = useCallback(async () => {
+    const raw = await pickBackupFile();
+    if (raw == null) return;
+    const imported = parseBackup(raw);
+    if (!imported) {
+      window.alert("That file doesn't look like a Maintenance Tracker backup.");
+      return;
+    }
+    const current = dataRef.current;
+    const n = imported.vehicles.length;
+    const replaceNote =
+      current && current.vehicles.length > 0
+        ? ` This replaces the ${current.vehicles.length} vehicle${
+            current.vehicles.length > 1 ? 's' : ''
+          } currently in your garage.`
+        : '';
+    if (!window.confirm(`Restore ${n} vehicle${n === 1 ? '' : 's'} from this backup?${replaceNote}`))
+      return;
+    commit(imported);
+    setNav({ screen: 'home' });
+  }, [commit]);
+
   const updateVehicle = useCallback(
     (id: string, fn: (rec: VehicleRecord) => VehicleRecord) => {
       const cur = dataRef.current;
@@ -98,18 +135,20 @@ export default function App() {
     );
   }
 
-  const handleMileageSetup = (vehicle: Vehicle, { mileage, answers }: MileageSetupResult) => {
+  const handleMileageSetup = (vehicle: Vehicle, { mileage, oilType, answers }: MileageSetupResult) => {
     let rec = newVehicleRecord({
       vehicle,
       currentMileage: mileage,
       mileageUpdatedAt: new Date().toISOString(),
+      oilType,
     });
     // Translate questionnaire answers into "last done" mileages. A user
     // guesstimate of "miles ago" wins; otherwise fall back per choice:
     //   recently   → done at roughly current mileage (not due for a full interval)
     //   a while ago→ done ~3/4 of an interval ago (due again fairly soon)
     //   unknown    → no record (shows as due now)
-    for (const item of SCHEDULE) {
+    // The oil-adjusted schedule keeps the oil-change math on the chosen interval.
+    for (const item of scheduleFor(oilType)) {
       const answer = answers[item.id];
       if (!answer) continue;
       if (answer.choice === 'unknown') rec = setLastDone(rec, item.id, null);
@@ -155,6 +194,8 @@ export default function App() {
             onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
             onNotificationsEnabled={handleNotificationsEnabled}
             onSendTestReminder={handleSendTestReminder}
+            onExportBackup={handleExportBackup}
+            onImportBackup={BACKUP_IMPORT_SUPPORTED ? handleImportBackup : undefined}
           />
         );
         break;
@@ -166,6 +207,10 @@ export default function App() {
           onCompleteTask={(itemId) =>
             updateVehicle(rec.id, (r) => completeTask(r, itemId, r.currentMileage))
           }
+          onEditLastDone={(itemId, mileage) =>
+            updateVehicle(rec.id, (r) => editLastDoneMileage(r, itemId, mileage))
+          }
+          onSetOilType={(oilType) => updateVehicle(rec.id, (r) => ({ ...r, oilType }))}
           onUpdateMileage={(mileage) =>
             updateVehicle(rec.id, (r) => ({
               ...r,
@@ -199,6 +244,8 @@ export default function App() {
           onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
           onNotificationsEnabled={handleNotificationsEnabled}
           onSendTestReminder={handleSendTestReminder}
+          onExportBackup={handleExportBackup}
+          onImportBackup={BACKUP_IMPORT_SUPPORTED ? handleImportBackup : undefined}
         />
       );
   }

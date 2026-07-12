@@ -25,6 +25,7 @@ export function newVehicleRecord(fields: Partial<VehicleRecord> & Pick<VehicleRe
     maintenanceCadence: 'weekly',
     maintenanceCustomDays: 7,
     customItems: [],
+    oilType: 'synthetic-blend',
     createdAt: new Date().toISOString(),
     ...fields,
   };
@@ -45,6 +46,7 @@ function migrate(parsed: any): AppData {
         customItems: [],
         maintenanceCadence: 'weekly',
         maintenanceCustomDays: 7,
+        oilType: 'synthetic-blend',
         ...v,
       })),
       schemaVersion: SCHEMA_VERSION,
@@ -62,6 +64,28 @@ function migrate(parsed: any): AppData {
     );
   }
   return { vehicles, reminderHour: parsed?.reminderHour ?? 9, schemaVersion: SCHEMA_VERSION };
+}
+
+/**
+ * Parse a user-picked backup file. Returns null unless the content looks like
+ * Maintenance Tracker data (current or v1 shape). Runs the same migration as
+ * loadData so backups made by older app versions restore cleanly.
+ */
+export function parseBackup(raw: string): AppData | null {
+  try {
+    const parsed = JSON.parse(raw);
+    const looksLikeBackup =
+      Array.isArray(parsed?.vehicles) || (parsed?.vehicle && parsed?.onboarded);
+    if (!looksLikeBackup) return null;
+    const data = migrate(parsed);
+    // Drop entries too malformed to render rather than rejecting the file.
+    data.vehicles = data.vehicles.filter(
+      (v: any) => v && typeof v.id === 'string' && v.vehicle && typeof v.vehicle.make === 'string',
+    );
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export async function loadData(): Promise<AppData> {
