@@ -29,7 +29,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#0F1420"
         }
-      ]
+      ],
+      "expo-status-bar"
     ]
   }
 }
