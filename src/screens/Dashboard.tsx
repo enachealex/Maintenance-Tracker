@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { OIL_TYPES, computeTasks, fmtMiles, isCustomItem, oilTypeOf, vehicleName } from '../logic';
+import {
+  OIL_TYPES,
+  computeTasks,
+  dueDescription,
+  fmtMiles,
+  isCustomItem,
+  oilTypeOf,
+  vehicleName,
+} from '../logic';
 import { CADENCE_OPTIONS, daysSinceMileageUpdate, isMileageStale } from '../cadence';
 import { Button, Card, Field, Screen, SelectField } from '../components/ui';
 import { colors, spacing } from '../theme';
@@ -384,6 +392,9 @@ function Section({
   );
 }
 
+const fmtHistoryDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
 function TaskRow({
   task,
   onComplete,
@@ -395,15 +406,17 @@ function TaskRow({
   onEditLastDone: (mileage: number | null) => void;
   onRemove?: () => void;
 }) {
-  const { item, status, nextDueMileage, milesOverdue, state } = task;
+  const { item, status, state } = task;
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const badge =
     status === 'overdue'
-      ? { text: `${fmtMiles(milesOverdue)} overdue`, color: colors.danger, bg: colors.dangerSoft }
+      ? { color: colors.danger, bg: colors.dangerSoft }
       : status === 'due-soon'
-        ? { text: `due in ${fmtMiles(-milesOverdue)}`, color: colors.warn, bg: colors.warnSoft }
-        : { text: `due at ${fmtMiles(nextDueMileage)}`, color: colors.ok, bg: colors.okSoft };
+        ? { color: colors.warn, bg: colors.warnSoft }
+        : { color: colors.ok, bg: colors.okSoft };
+  const history = [...state.history].reverse(); // newest first
 
   const startEdit = () => {
     setEditText(state.lastDoneMileage != null ? String(state.lastDoneMileage) : '');
@@ -426,16 +439,26 @@ function TaskRow({
           <Pressable onPress={startEdit} hitSlop={4}>
             <Text style={styles.taskMeta}>
               every {item.intervalMiles.toLocaleString()} mi
+              {item.intervalMonths ? ` / ${item.intervalMonths} mo` : ''}
               {state.lastDoneMileage != null
                 ? ` · last done at ${fmtMiles(state.lastDoneMileage)}`
                 : ' · no record yet'}
               <Text style={styles.editLink}> ✎ edit</Text>
             </Text>
           </Pressable>
-          <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-            <Text style={{ color: badge.color, fontSize: 12, fontWeight: '700' }}>
-              {badge.text}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+              <Text style={{ color: badge.color, fontSize: 12, fontWeight: '700' }}>
+                {dueDescription(task)}
+              </Text>
+            </View>
+            {history.length > 0 && (
+              <Pressable onPress={() => setShowHistory((s) => !s)} hitSlop={6}>
+                <Text style={styles.historyLink}>
+                  🕓 {history.length} {showHistory ? '▴' : '▾'}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
         {onRemove && (
@@ -449,6 +472,15 @@ function TaskRow({
           </Pressable>
         )}
       </View>
+      {showHistory && history.length > 0 && (
+        <View style={styles.historyBox}>
+          {history.map((h, i) => (
+            <Text key={`${h.date}-${i}`} style={styles.historyRow}>
+              ✓ {fmtMiles(h.mileage)} · {fmtHistoryDate(h.date)}
+            </Text>
+          ))}
+        </View>
+      )}
       {editing && (
         <View style={styles.editBox}>
           <Field
@@ -521,6 +553,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
+  historyLink: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
+  historyBox: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+    gap: 4,
+  },
+  historyRow: { color: colors.textDim, fontSize: 13 },
   badge: {
     alignSelf: 'flex-start',
     borderRadius: 999,

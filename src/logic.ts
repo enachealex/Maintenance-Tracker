@@ -14,6 +14,10 @@ export const oilTypeOf = (rec: VehicleRecord): OilType => rec.oilType ?? DEFAULT
 
 /** A task counts as "due soon" within this many miles of its due point. */
 const DUE_SOON_MILES = 500;
+/** …or within this many days of its time-based due point. */
+const DUE_SOON_DAYS = 14;
+const DAY_MS = 86_400_000;
+const MONTH_MS = 30.44 * DAY_MS; // average month
 
 const emptyState = (): TaskState => ({
   lastDoneMileage: null,
@@ -43,19 +47,58 @@ export function itemsFor(rec: VehicleRecord): ScheduleItem[] {
  * Compute the status of every schedule item for the vehicle's current mileage.
  * If a task has never been recorded, it is treated as if last done at
  * mileage 0 — i.e. everything that should have happened by now shows as due.
+ *
+ * Tasks come due by miles OR months, whichever hits first, so low-mileage
+ * cars still get time-based reminders (oil ages even when the car sits).
+ * The time dimension needs a real last-done date; questionnaire estimates
+ * carry no date, so those stay miles-only until the first real check-off.
  */
-export function computeTasks(rec: VehicleRecord): ComputedTask[] {
+export function computeTasks(rec: VehicleRecord, now = Date.now()): ComputedTask[] {
   const mileage = rec.currentMileage;
-  return itemsFor(rec).map((item) => {
-    const state = getTaskState(rec, item.id);
-    const lastDone = state.lastDoneMileage ?? 0;
-    const nextDueMileage = lastDone + item.intervalMiles;
-    const milesOverdue = mileage - nextDueMileage;
-    let status: TaskStatus = 'ok';
-    if (milesOverdue >= 0) status = 'overdue';
-    else if (milesOverdue >= -DUE_SOON_MILES) status = 'due-soon';
-    return { item, state, status, nextDueMileage, milesOverdue };
-  }).sort((a, b) => b.milesOverdue - a.milesOverdue);
+  const severity = (t: ComputedTask) => (t.status === 'overdue' ? 2 : t.status === 'due-soon' ? 1 : 0);
+  return itemsFor(rec)
+    .map((item) => {
+      const state = getTaskState(rec, item.id);
+      const lastDone = state.lastDoneMileage ?? 0;
+      const nextDueMileage = lastDone + item.intervalMiles;
+      const milesOverdue = mileage - nextDueMileage;
+
+      let daysOverdue: number | null = null;
+      if (item.intervalMonths && state.lastDoneDate) {
+        const dueAt = Date.parse(state.lastDoneDate) + item.intervalMonths * MONTH_MS;
+        daysOverdue = Math.floor((now - dueAt) / DAY_MS);
+      }
+
+      let status: TaskStatus = 'ok';
+      if (milesOverdue >= 0 || (daysOverdue != null && daysOverdue >= 0)) status = 'overdue';
+      else if (
+        milesOverdue >= -DUE_SOON_MILES ||
+        (daysOverdue != null && daysOverdue >= -DUE_SOON_DAYS)
+      )
+        status = 'due-soon';
+      return { item, state, status, nextDueMileage, milesOverdue, daysOverdue };
+    })
+    .sort((a, b) => severity(b) - severity(a) || b.milesOverdue - a.milesOverdue);
+}
+
+const fmtDays = (d: number) =>
+  d >= 60 ? `${Math.round(d / 30.44)} months` : `${d} day${d === 1 ? '' : 's'}`;
+
+/**
+ * Human description of a task's urgency, shared by the dashboard badge and
+ * reminder notifications: "1,500 mi overdue", "3 months overdue",
+ * "due in 300 mi", "due in 5 days", "due today", "due at 60,000 mi".
+ */
+export function dueDescription(t: ComputedTask): string {
+  if (t.milesOverdue >= 0) return `${fmtMiles(t.milesOverdue)} overdue`;
+  if (t.daysOverdue != null && t.daysOverdue >= 0) {
+    return t.daysOverdue === 0 ? 'due today' : `${fmtDays(t.daysOverdue)} overdue`;
+  }
+  if (t.status === 'due-soon') {
+    if (t.milesOverdue >= -DUE_SOON_MILES) return `due in ${fmtMiles(-t.milesOverdue)}`;
+    return `due in ${fmtDays(-t.daysOverdue!)}`;
+  }
+  return `due at ${fmtMiles(t.nextDueMileage)}`;
 }
 
 export function dueTasks(rec: VehicleRecord): ComputedTask[] {

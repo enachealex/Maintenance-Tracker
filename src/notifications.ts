@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { AppData, VehicleRecord } from './types';
-import { dueTasks, fmtMiles, vehicleName } from './logic';
+import { dueDescription, dueTasks, vehicleName } from './logic';
 import { cadenceDays, cadenceLabel, maintenanceCadenceDays } from './cadence';
 
 const supported = Platform.OS !== 'web';
@@ -87,10 +87,7 @@ export async function syncAllReminders(data: AppData): Promise<void> {
             };
 
     for (const task of dueTasks(rec)) {
-      const overdueText =
-        task.milesOverdue >= 0
-          ? `${fmtMiles(task.milesOverdue)} overdue`
-          : `due in ${fmtMiles(-task.milesOverdue)}`;
+      const overdueText = dueDescription(task);
       await Notifications.scheduleNotificationAsync({
         content: {
           title: `🔧 Maintenance due: ${task.item.name}`,

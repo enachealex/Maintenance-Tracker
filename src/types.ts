@@ -64,4 +64,9 @@ export interface ComputedTask {
   nextDueMileage: number;
   /** Miles past due (positive = overdue) */
   milesOverdue: number;
+  /**
+   * Days past the time-based interval (positive = overdue). null when the
+   * item has no month interval or the last-done date is unknown.
+   */
+  daysOverdue: number | null;
 }
