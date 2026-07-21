@@ -9,8 +9,10 @@ stores an anonymous push subscription and acts as a scheduled "nudge". When a pu
 arrives, the app's service worker reads the **on-device** due-list snapshot and
 renders the reminder — so personal data never reaches this server.
 
-- `POST /subscribe` — store a push subscription (idempotent, keyed by endpoint hash)
-- `POST /unsubscribe` — remove a subscription
+- `POST /subscribe` — store a push subscription (idempotent, keyed by endpoint hash).
+  When `ALLOWED_ORIGINS` is set in `wrangler.toml`, only requests from those
+  origins are accepted (403 otherwise) — set it to your deployed app's origin.
+- `POST /unsubscribe` — remove a subscription (same origin rule)
 - `GET  /vapidPublicKey` — the public VAPID key
 - `POST /test` — send a push to all subscriptions now (requires `X-Admin-Token`)
 - Cron (`0 15 * * 1`, weekly) — nudge every subscribed device

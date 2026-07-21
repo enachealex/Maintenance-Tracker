@@ -11,6 +11,12 @@ crons = ["0 15 * * 1"]
 VAPID_PUBLIC_KEY = "BJNHEZlKQGOtnb89u5D-FskKeqRumQmodbsR1Zn2pqRBYJRivwkm9wJe1Z5m8kBLCYpzgIN7FwAEyoyYxoK6cs4"
 VAPID_SUBJECT = "mailto:enachealex1@gmail.com"
 
+# Origins allowed to call /subscribe and /unsubscribe — set this to your
+# deployed app's origin(s), comma-separated, to block junk subscriptions from
+# other sites, e.g. "https://your-app.pages.dev,http://localhost:8081".
+# Empty = allow every origin (the pre-hardening behavior).
+ALLOWED_ORIGINS = ""
+
 # VAPID_PRIVATE_KEY and ADMIN_TOKEN are set via `wrangler secret put` (never committed).
 
 [[kv_namespaces]]

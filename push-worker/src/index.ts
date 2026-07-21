@@ -6,18 +6,46 @@ export interface Env {
   VAPID_SUBJECT: string;
   VAPID_PRIVATE_KEY: string; // secret
   ADMIN_TOKEN: string; // secret — gates the /test endpoint
+  /**
+   * Comma-separated origins allowed to (un)subscribe, e.g.
+   * "https://maintenance.example.com,http://localhost:8081".
+   * Empty/unset = allow every origin (pre-hardening behavior) so a deploy
+   * without configuration can't lock the real app out.
+   */
+  ALLOWED_ORIGINS?: string;
 }
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
-};
+const allowedOrigins = (env: Env): string[] =>
+  (env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-const json = (obj: unknown, status = 200) =>
+/** True when the request may register/remove subscriptions. */
+function originAllowed(req: Request, env: Env): boolean {
+  const allowed = allowedOrigins(env);
+  if (allowed.length === 0) return true; // not configured yet
+  const origin = req.headers.get('Origin');
+  return origin != null && allowed.includes(origin);
+}
+
+/** CORS headers: reflect only allow-listed origins once the list is configured. */
+function corsFor(req: Request, env: Env): Record<string, string> {
+  const allowed = allowedOrigins(env);
+  const origin = req.headers.get('Origin');
+  const allowOrigin =
+    allowed.length === 0 ? '*' : origin && allowed.includes(origin) ? origin : null;
+  return {
+    ...(allowOrigin ? { 'Access-Control-Allow-Origin': allowOrigin, Vary: 'Origin' } : {}),
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
+  };
+}
+
+const json = (obj: unknown, status = 200, cors: Record<string, string> = {}) =>
   new Response(JSON.stringify(obj), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS },
+    headers: { 'Content-Type': 'application/json', ...cors },
   });
 
 /** KV key derived from the subscription endpoint so re-subscribing is idempotent. */
@@ -29,34 +57,38 @@ async function keyFor(endpoint: string): Promise<string> {
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+    const cors = corsFor(req, env);
+    const reply = (obj: unknown, status = 200) => json(obj, status, cors);
+    if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
     const url = new URL(req.url);
 
     if (url.pathname === '/vapidPublicKey') {
-      return json({ publicKey: env.VAPID_PUBLIC_KEY });
+      return reply({ publicKey: env.VAPID_PUBLIC_KEY });
     }
 
     if (url.pathname === '/subscribe' && req.method === 'POST') {
+      if (!originAllowed(req, env)) return reply({ error: 'origin not allowed' }, 403);
       const sub = (await req.json().catch(() => null)) as any;
-      if (!sub?.endpoint) return json({ error: 'invalid subscription' }, 400);
+      if (!sub?.endpoint) return reply({ error: 'invalid subscription' }, 400);
       await env.SUBSCRIPTIONS.put(await keyFor(sub.endpoint), JSON.stringify(sub));
-      return json({ ok: true });
+      return reply({ ok: true });
     }
 
     if (url.pathname === '/unsubscribe' && req.method === 'POST') {
+      if (!originAllowed(req, env)) return reply({ error: 'origin not allowed' }, 403);
       const body = (await req.json().catch(() => null)) as any;
       if (body?.endpoint) await env.SUBSCRIPTIONS.delete(await keyFor(body.endpoint));
-      return json({ ok: true });
+      return reply({ ok: true });
     }
 
     // Manual trigger for confirming delivery — requires the admin token.
     if (url.pathname === '/test' && req.method === 'POST') {
-      if (req.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+      if (req.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) return reply({ error: 'unauthorized' }, 401);
       const sent = await sendToAll(env, 'test');
-      return json({ sent });
+      return reply({ sent });
     }
 
-    return json({ ok: true, service: 'maintenance-push' });
+    return reply({ ok: true, service: 'maintenance-push' });
   },
 
   // Cron trigger (see wrangler.toml) — nudge every subscribed device.
