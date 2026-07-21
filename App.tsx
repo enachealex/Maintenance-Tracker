@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/types';
 import { DEFAULT_DATA, loadData, newVehicleRecord, parseBackup, saveData } from './src/storage';
@@ -34,11 +34,68 @@ type Nav =
   | { screen: 'add-mileage'; vehicle: Vehicle }
   | { screen: 'vehicle'; id: string; editMileage?: boolean };
 
+/** The screen a back action (button or hardware) returns to. */
+const parentOf = (n: Nav): Nav =>
+  n.screen === 'add-mileage' ? { screen: 'add-vehicle' } : { screen: 'home' };
+
+/**
+ * Web/PWA: keep exactly one history entry above the base while off the home
+ * screen, so the phone's back button/gesture pops it (handled in App's
+ * popstate listener) and navigates in-app instead of closing the app.
+ */
+function ensureHistoryEntry(): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  if (!window.history.state?.mtBack) window.history.pushState({ mtBack: true }, '');
+}
+
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [nav, setNav] = useState<Nav>({ screen: 'home' });
   const dataRef = useRef<AppData | null>(null);
   dataRef.current = data;
+  const navRef = useRef<Nav>(nav);
+  navRef.current = nav;
+
+  /** Navigate forward (also arms the back button/gesture on web). */
+  const go = useCallback((next: Nav) => {
+    if (next.screen !== 'home') ensureHistoryEntry();
+    setNav(next);
+  }, []);
+
+  /** Navigate back one screen, keeping the browser history in sync on web. */
+  const goBack = useCallback(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history.state?.mtBack) {
+      window.history.back(); // the popstate listener moves nav to the parent
+      return;
+    }
+    if (navRef.current.screen !== 'home') setNav(parentOf(navRef.current));
+  }, []);
+
+  // Web: the phone's back button/gesture (or browser Back) pops our history
+  // entry — go back one screen, re-arming the entry while still off home.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPop = () => {
+      const cur = navRef.current;
+      if (cur.screen === 'home') return;
+      const parent = parentOf(cur);
+      setNav(parent);
+      if (parent.screen !== 'home') window.history.pushState({ mtBack: true }, '');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // Native Android: hardware back goes back one screen; from home it exits.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (navRef.current.screen === 'home') return false; // default: leave app
+      setNav(parentOf(navRef.current));
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     setupWebViewport(); // web: fill the usable screen (dvh + safe-area support)
@@ -52,7 +109,7 @@ export default function App() {
       // Cold start from a web notification tap (?vehicle=…&editMileage=1)
       const tap = getInitialWebNav();
       if (tap && d.vehicles.some((v) => v.id === tap.vehicleId)) {
-        setNav({ screen: 'vehicle', id: tap.vehicleId, editMileage: tap.editMileage });
+        go({ screen: 'vehicle', id: tap.vehicleId, editMileage: tap.editMileage });
       }
     });
   }, []);
@@ -62,7 +119,7 @@ export default function App() {
   useEffect(() => {
     return addNotificationResponseListener(({ vehicleId, kind }) => {
       const exists = dataRef.current?.vehicles.some((v) => v.id === vehicleId);
-      if (exists) setNav({ screen: 'vehicle', id: vehicleId, editMileage: kind === 'mileage' });
+      if (exists) go({ screen: 'vehicle', id: vehicleId, editMileage: kind === 'mileage' });
     });
   }, []);
 
@@ -70,7 +127,7 @@ export default function App() {
   useEffect(() => {
     return addWebNotificationTapListener(({ vehicleId, editMileage }) => {
       const exists = dataRef.current?.vehicles.some((v) => v.id === vehicleId);
-      if (exists) setNav({ screen: 'vehicle', id: vehicleId, editMileage });
+      if (exists) go({ screen: 'vehicle', id: vehicleId, editMileage });
     });
   }, []);
 
@@ -158,12 +215,12 @@ export default function App() {
       else rec = setLastDone(rec, item.id, Math.max(0, mileage - Math.round(item.intervalMiles * 0.75)));
     }
     commit({ ...data, vehicles: [...data.vehicles, rec] });
-    setNav({ screen: 'vehicle', id: rec.id });
+    go({ screen: 'vehicle', id: rec.id });
   };
 
   const removeVehicle = (id: string) => {
     commit({ ...data, vehicles: data.vehicles.filter((v) => v.id !== id) });
-    setNav({ screen: 'home' });
+    goBack();
   };
 
   let screen: React.ReactNode;
@@ -171,8 +228,8 @@ export default function App() {
     case 'add-vehicle':
       screen = (
         <VehicleSetup
-          onDone={(vehicle) => setNav({ screen: 'add-mileage', vehicle })}
-          onCancel={data.vehicles.length > 0 ? () => setNav({ screen: 'home' }) : undefined}
+          onDone={(vehicle) => go({ screen: 'add-mileage', vehicle })}
+          onCancel={data.vehicles.length > 0 ? goBack : undefined}
         />
       );
       break;
@@ -190,8 +247,8 @@ export default function App() {
         screen = (
           <Home
             vehicles={data.vehicles}
-            onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
-            onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
+            onOpenVehicle={(id) => go({ screen: 'vehicle', id })}
+            onAddVehicle={() => go({ screen: 'add-vehicle' })}
             onNotificationsEnabled={handleNotificationsEnabled}
             onSendTestReminder={handleSendTestReminder}
             onExportBackup={handleExportBackup}
@@ -230,7 +287,7 @@ export default function App() {
           }
           onAddCustomItem={(fields) => updateVehicle(rec.id, (r) => addCustomItem(r, fields))}
           onRemoveCustomItem={(itemId) => updateVehicle(rec.id, (r) => removeCustomItem(r, itemId))}
-          onBack={() => setNav({ screen: 'home' })}
+          onBack={goBack}
           onRemove={() => removeVehicle(rec.id)}
         />
       );
@@ -240,8 +297,8 @@ export default function App() {
       screen = (
         <Home
           vehicles={data.vehicles}
-          onOpenVehicle={(id) => setNav({ screen: 'vehicle', id })}
-          onAddVehicle={() => setNav({ screen: 'add-vehicle' })}
+          onOpenVehicle={(id) => go({ screen: 'vehicle', id })}
+          onAddVehicle={() => go({ screen: 'add-vehicle' })}
           onNotificationsEnabled={handleNotificationsEnabled}
           onSendTestReminder={handleSendTestReminder}
           onExportBackup={handleExportBackup}

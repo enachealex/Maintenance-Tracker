@@ -129,8 +129,13 @@ export default function Dashboard({
 
   return (
     <Screen topPadding={56}>
-      <Pressable onPress={onBack} hitSlop={8} style={styles.backRow}>
-        <Text style={styles.back}>‹ Garage</Text>
+      <Pressable
+        onPress={onBack}
+        hitSlop={8}
+        style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+      >
+        <Text style={styles.backArrow}>‹</Text>
+        <Text style={styles.backText}>Garage</Text>
       </Pressable>
 
       <Text style={styles.h1}>{vehicleName(rec)}</Text>
@@ -468,8 +473,21 @@ function TaskRow({
 }
 
 const styles = StyleSheet.create({
-  backRow: { marginBottom: spacing.sm },
-  back: { color: colors.accent, fontSize: 16, fontWeight: '600' },
+  backButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: spacing.md,
+  },
+  backArrow: { color: colors.accent, fontSize: 22, fontWeight: '800', lineHeight: 22 },
+  backText: { color: colors.accent, fontSize: 16, fontWeight: '700' },
   h1: { color: colors.text, fontSize: 24, fontWeight: '800' },
   sub: { color: colors.textDim, fontSize: 14, marginTop: 2 },
   mileageCard: { marginTop: spacing.md, marginBottom: spacing.md },
