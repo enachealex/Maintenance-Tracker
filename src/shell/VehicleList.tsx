@@ -1,131 +1,118 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { Button, Card, Screen } from '../components/ui';
-import NotificationPrompt from '../components/NotificationPrompt';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Card } from '../components/ui';
 import { colors, spacing } from '../theme';
 import { dueCount, fmtMiles, vehicleName } from '../features/maintenance/logic';
 import { cadenceLabel, isMileageStale } from '../features/maintenance/cadence';
 import { VehicleRecord } from '../core/types';
 
-export default function Home({
-  vehicles,
-  onOpenVehicle,
-  onAddVehicle,
-  onNotificationsEnabled,
-  onSendTestReminder,
-  onExportBackup,
-  onImportBackup,
+/**
+ * The garage vehicle card, shared by every tab. `actions` lets a tab append
+ * its own controls (Home offers both features; the feature tabs go straight
+ * in), so the card looks the same wherever it appears.
+ */
+export function VehicleCard({
+  rec,
+  onPress,
+  showDue = true,
+  actions,
 }: {
-  vehicles: VehicleRecord[];
-  onOpenVehicle: (id: string) => void;
-  onAddVehicle: () => void;
-  onNotificationsEnabled: () => void;
-  onSendTestReminder: () => void;
-  onExportBackup: () => void;
-  /** Absent on native, where there's no file picker. */
-  onImportBackup?: () => void;
+  rec: VehicleRecord;
+  onPress?: () => void;
+  /** Maintenance badge + due line. Off for tabs where it isn't the subject. */
+  showDue?: boolean;
+  actions?: React.ReactNode;
 }) {
-  const totalDue = vehicles.reduce((sum, v) => sum + dueCount(v), 0);
-  const wide = useWindowDimensions().width >= 768;
-
-  return (
-    <Screen>
-      <Text style={[styles.h1, wide && styles.centered]}>🚗 My Garage</Text>
-      <Text style={[styles.sub, wide && styles.centered]}>
-        {vehicles.length === 0
-          ? 'Add your first vehicle to start tracking maintenance.'
-          : `${vehicles.length} vehicle${vehicles.length > 1 ? 's' : ''} · ${
-              totalDue === 0 ? 'all caught up' : `${totalDue} item${totalDue > 1 ? 's' : ''} needing attention`
-            }`}
-      </Text>
-
-      {vehicles.length > 0 && (
-        <NotificationPrompt onEnabled={onNotificationsEnabled} onSendTest={onSendTestReminder} />
-      )}
-
-      {vehicles.length === 0 ? (
-        <Card style={styles.emptyCard}>
-          <Text style={styles.emptyEmoji}>🅿️</Text>
-          <Text style={styles.emptyText}>Your garage is empty.</Text>
-        </Card>
-      ) : (
-        vehicles.map((rec) => (
-          <VehicleCard key={rec.id} rec={rec} onPress={() => onOpenVehicle(rec.id)} />
-        ))
-      )}
-
-      <View style={wide && styles.centerRow}>
-        <Button title="＋ Add vehicle" onPress={onAddVehicle} />
-      </View>
-
-      {(vehicles.length > 0 || onImportBackup) && (
-        <View style={styles.backupBlock}>
-          <View style={[styles.backupRow, wide && styles.centerRow]}>
-            {vehicles.length > 0 && (
-              <Button title="Export backup" variant="ghost" onPress={onExportBackup} />
-            )}
-            {onImportBackup && (
-              <Button title="Import backup" variant="ghost" onPress={onImportBackup} />
-            )}
-          </View>
-          <Text style={styles.backupHint}>
-            Your data lives only on this device — export a backup to keep a copy or move to
-            another device.
-          </Text>
-        </View>
-      )}
-      <View style={{ height: spacing.xl }} />
-    </Screen>
-  );
-}
-
-function VehicleCard({ rec, onPress }: { rec: VehicleRecord; onPress: () => void }) {
   const due = dueCount(rec);
   const stale = isMileageStale(rec);
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.7 }}>
-      <Card>
-        <View style={styles.cardTop}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.vehicleName}>{vehicleName(rec)}</Text>
-            <Text style={styles.vehicleMeta}>
-              {rec.vehicle.trim} · {rec.vehicle.engine}
-            </Text>
-          </View>
-          {due > 0 ? (
+
+  const body = (
+    <Card>
+      <View style={styles.cardTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.vehicleName}>{vehicleName(rec)}</Text>
+          <Text style={styles.vehicleMeta}>
+            {rec.vehicle.trim} · {rec.vehicle.engine}
+          </Text>
+        </View>
+        {showDue &&
+          (due > 0 ? (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{due}</Text>
             </View>
           ) : (
             <Text style={styles.okCheck}>✓</Text>
-          )}
-        </View>
+          ))}
+      </View>
 
-        <View style={styles.cardBottom}>
-          <Text style={styles.mileage}>{fmtMiles(rec.currentMileage)}</Text>
+      <View style={styles.cardBottom}>
+        <Text style={styles.mileage}>{fmtMiles(rec.currentMileage)}</Text>
+        {showDue && (
           <Text style={styles.dueLine}>
             {due > 0 ? `${due} item${due > 1 ? 's' : ''} due` : 'All caught up'}
           </Text>
-        </View>
-
-        {stale && (
-          <Text style={styles.staleHint}>
-            🧭 Mileage update due ({cadenceLabel(rec)})
-          </Text>
         )}
-      </Card>
+      </View>
+
+      {showDue && stale && (
+        <Text style={styles.staleHint}>🧭 Mileage update due ({cadenceLabel(rec)})</Text>
+      )}
+
+      {actions && <View style={styles.actions}>{actions}</View>}
+    </Card>
+  );
+
+  if (!onPress) return body;
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.7 }}>
+      {body}
     </Pressable>
   );
 }
 
+/** Empty-garage placeholder, shared so every tab says the same thing. */
+export function EmptyGarage({ text }: { text: string }) {
+  return (
+    <Card style={styles.emptyCard}>
+      <Text style={styles.emptyEmoji}>🅿️</Text>
+      <Text style={styles.emptyText}>{text}</Text>
+    </Card>
+  );
+}
+
+export default function VehicleList({
+  vehicles,
+  onOpenVehicle,
+  emptyText,
+  showDue = true,
+  renderActions,
+}: {
+  vehicles: VehicleRecord[];
+  onOpenVehicle?: (id: string) => void;
+  emptyText: string;
+  showDue?: boolean;
+  renderActions?: (rec: VehicleRecord) => React.ReactNode;
+}) {
+  if (vehicles.length === 0) return <EmptyGarage text={emptyText} />;
+  return (
+    <>
+      {vehicles.map((rec) => (
+        <VehicleCard
+          key={rec.id}
+          rec={rec}
+          showDue={showDue}
+          onPress={onOpenVehicle ? () => onOpenVehicle(rec.id) : undefined}
+          actions={renderActions?.(rec)}
+        />
+      ))}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: spacing.xs },
-  sub: { color: colors.textDim, fontSize: 15, marginBottom: spacing.lg },
-  centered: { textAlign: 'center' },
-  centerRow: { alignItems: 'center' },
   emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyEmoji: { fontSize: 40, marginBottom: spacing.sm },
-  emptyText: { color: colors.textDim, fontSize: 15 },
+  emptyText: { color: colors.textDim, fontSize: 15, textAlign: 'center' },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start' },
   vehicleName: { color: colors.text, fontSize: 19, fontWeight: '800' },
   vehicleMeta: { color: colors.textDim, fontSize: 13, marginTop: 2 },
@@ -148,22 +135,13 @@ const styles = StyleSheet.create({
   },
   mileage: { color: colors.text, fontSize: 22, fontWeight: '800' },
   dueLine: { color: colors.textDim, fontSize: 13 },
-  staleHint: {
-    color: colors.warn,
-    fontSize: 12,
-    marginTop: spacing.sm,
-    fontWeight: '600',
-  },
-  backupBlock: { marginTop: spacing.lg },
-  backupRow: {
+  staleHint: { color: colors.warn, fontSize: 12, marginTop: spacing.sm, fontWeight: '600' },
+  actions: {
     flexDirection: 'row',
-    justifyContent: 'center',
     gap: spacing.sm,
-  },
-  backupHint: {
-    color: colors.textDim,
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+    paddingTop: spacing.md,
   },
 });

@@ -2,7 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/core/types';
-import { DEFAULT_DATA, loadData, newVehicleRecord, parseBackup, saveData } from './src/core/storage';
+import {
+  DEFAULT_DATA,
+  loadData,
+  newVehicleRecord,
+  parseBackup,
+  saveData,
+} from './src/core/storage';
 import {
   addCustomItem,
   completeTask,
@@ -23,20 +29,14 @@ import {
 } from './src/webNotifications';
 import { setupWebViewport } from './src/webViewport';
 import { colors } from './src/theme';
-import Home from './src/shell/VehicleList';
+import { isTabRoot, Nav, parentOf, TabKey, tabOf } from './src/shell/nav';
+import TabBar from './src/shell/TabBar';
+import HomeHub from './src/shell/HomeHub';
+import MaintenanceTab from './src/features/maintenance/MaintenanceTab';
+import WheelsTab from './src/features/wheels/WheelsTab';
 import VehicleSetup from './src/features/maintenance/VehicleSetup';
 import MileageSetup, { MileageSetupResult } from './src/features/maintenance/MileageSetup';
 import Dashboard from './src/features/maintenance/Dashboard';
-
-type Nav =
-  | { screen: 'home' }
-  | { screen: 'add-vehicle' }
-  | { screen: 'add-mileage'; vehicle: Vehicle }
-  | { screen: 'vehicle'; id: string; editMileage?: boolean };
-
-/** The screen a back action (button or hardware) returns to. */
-const parentOf = (n: Nav): Nav =>
-  n.screen === 'add-mileage' ? { screen: 'add-vehicle' } : { screen: 'home' };
 
 /**
  * Web/PWA: keep exactly one history entry above the base while off the home
@@ -109,7 +109,7 @@ export default function App() {
       // Cold start from a web notification tap (?vehicle=…&editMileage=1)
       const tap = getInitialWebNav();
       if (tap && d.vehicles.some((v) => v.id === tap.vehicleId)) {
-        go({ screen: 'vehicle', id: tap.vehicleId, editMileage: tap.editMileage });
+        go({ screen: 'vehicle', id: tap.vehicleId, editMileage: tap.editMileage, from: 'maintenance' });
       }
     });
   }, []);
@@ -119,7 +119,8 @@ export default function App() {
   useEffect(() => {
     return addNotificationResponseListener(({ vehicleId, kind }) => {
       const exists = dataRef.current?.vehicles.some((v) => v.id === vehicleId);
-      if (exists) go({ screen: 'vehicle', id: vehicleId, editMileage: kind === 'mileage' });
+      if (exists)
+        go({ screen: 'vehicle', id: vehicleId, editMileage: kind === 'mileage', from: 'maintenance' });
     });
   }, []);
 
@@ -127,7 +128,7 @@ export default function App() {
   useEffect(() => {
     return addWebNotificationTapListener(({ vehicleId, editMileage }) => {
       const exists = dataRef.current?.vehicles.some((v) => v.id === vehicleId);
-      if (exists) go({ screen: 'vehicle', id: vehicleId, editMileage });
+      if (exists) go({ screen: 'vehicle', id: vehicleId, editMileage, from: 'maintenance' });
     });
   }, []);
 
@@ -192,7 +193,11 @@ export default function App() {
     );
   }
 
-  const handleMileageSetup = (vehicle: Vehicle, { mileage, oilType, answers }: MileageSetupResult) => {
+  const handleMileageSetup = (
+    vehicle: Vehicle,
+    { mileage, oilType, answers }: MileageSetupResult,
+    from: TabKey,
+  ) => {
     let rec = newVehicleRecord({
       vehicle,
       currentMileage: mileage,
@@ -215,7 +220,7 @@ export default function App() {
       else rec = setLastDone(rec, item.id, Math.max(0, mileage - Math.round(item.intervalMiles * 0.75)));
     }
     commit({ ...data, vehicles: [...data.vehicles, rec] });
-    go({ screen: 'vehicle', id: rec.id });
+    go({ screen: 'vehicle', id: rec.id, from });
   };
 
   const removeVehicle = (id: string) => {
@@ -223,12 +228,51 @@ export default function App() {
     goBack();
   };
 
+  const homeHub = (
+    <HomeHub
+      vehicles={data.vehicles}
+      onOpenMaintenance={(id) => go({ screen: 'vehicle', id, from: 'home' })}
+      onOpenWheels={(id) => go({ screen: 'wheels', vehicleId: id })}
+      onAddVehicle={() => go({ screen: 'add-vehicle', from: 'home' })}
+      onNotificationsEnabled={handleNotificationsEnabled}
+      onSendTestReminder={handleSendTestReminder}
+      onExportBackup={handleExportBackup}
+      onImportBackup={BACKUP_IMPORT_SUPPORTED ? handleImportBackup : undefined}
+    />
+  );
+
+  const goToTab = (tab: TabKey) => {
+    if (tab === 'home') go({ screen: 'home' });
+    else if (tab === 'maintenance') go({ screen: 'maintenance' });
+    else go({ screen: 'wheels' });
+  };
+
   let screen: React.ReactNode;
   switch (nav.screen) {
+    case 'maintenance':
+      screen = (
+        <MaintenanceTab
+          vehicles={data.vehicles}
+          onOpenVehicle={(id) => go({ screen: 'vehicle', id, from: 'maintenance' })}
+          onAddVehicle={() => go({ screen: 'add-vehicle', from: 'maintenance' })}
+        />
+      );
+      break;
+    case 'wheels':
+      screen = (
+        <WheelsTab
+          vehicles={data.vehicles}
+          selectedId={nav.vehicleId}
+          onSelectVehicle={(id) => go({ screen: 'wheels', vehicleId: id })}
+          onClearSelection={() => go({ screen: 'wheels' })}
+          onAddVehicle={() => go({ screen: 'add-vehicle', from: 'wheels' })}
+        />
+      );
+      break;
     case 'add-vehicle':
       screen = (
         <VehicleSetup
-          onDone={(vehicle) => go({ screen: 'add-mileage', vehicle })}
+          onDone={(vehicle) => go({ screen: 'add-mileage', vehicle, from: nav.from })}
           onCancel={data.vehicles.length > 0 ? goBack : undefined}
         />
       );
@@ -237,24 +281,14 @@ export default function App() {
       screen = (
         <MileageSetup
           vehicle={nav.vehicle}
-          onDone={(result) => handleMileageSetup(nav.vehicle, result)}
+          onDone={(result) => handleMileageSetup(nav.vehicle, result, nav.from)}
         />
       );
       break;
     case 'vehicle': {
       const rec = data.vehicles.find((v) => v.id === nav.id);
       if (!rec) {
-        screen = (
-          <Home
-            vehicles={data.vehicles}
-            onOpenVehicle={(id) => go({ screen: 'vehicle', id })}
-            onAddVehicle={() => go({ screen: 'add-vehicle' })}
-            onNotificationsEnabled={handleNotificationsEnabled}
-            onSendTestReminder={handleSendTestReminder}
-            onExportBackup={handleExportBackup}
-            onImportBackup={BACKUP_IMPORT_SUPPORTED ? handleImportBackup : undefined}
-          />
-        );
+        screen = homeHub;
         break;
       }
       screen = (
@@ -294,22 +328,15 @@ export default function App() {
       break;
     }
     default:
-      screen = (
-        <Home
-          vehicles={data.vehicles}
-          onOpenVehicle={(id) => go({ screen: 'vehicle', id })}
-          onAddVehicle={() => go({ screen: 'add-vehicle' })}
-          onNotificationsEnabled={handleNotificationsEnabled}
-          onSendTestReminder={handleSendTestReminder}
-          onExportBackup={handleExportBackup}
-          onImportBackup={BACKUP_IMPORT_SUPPORTED ? handleImportBackup : undefined}
-        />
-      );
+      screen = homeHub;
   }
 
   return (
     <View style={styles.container}>
-      {screen}
+      {/* The tab bar sits below the screen in normal flow, so scrolling
+          content is never hidden behind it. */}
+      <View style={styles.body}>{screen}</View>
+      {isTabRoot(nav) && <TabBar active={tabOf(nav)} onSelect={goToTab} />}
       <StatusBar style="light" />
     </View>
   );
@@ -317,4 +344,5 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  body: { flex: 1 },
 });
