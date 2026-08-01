@@ -1,6 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppData, VehicleRecord } from './types';
 
+/**
+ * Persisted-data invariants. Existing users must never lose data on an app
+ * update, so treat these as fixed. `__tests__/upgrade-safety.test.ts` enforces
+ * every one of them and will fail loudly if a change breaks it.
+ *
+ *  1. KEY never changes. Renaming it makes every existing install look empty.
+ *     The v1 in the name is the storage-format lineage, not SCHEMA_VERSION —
+ *     it stays put even as the schema moves on.
+ *  2. migrate() only ever adds. It spreads the stored object, so unknown and
+ *     future fields survive; defaults are applied under the spread so a user's
+ *     existing value always wins.
+ *  3. New fields ship with a default backfilled in migrate(), never as a
+ *     required field with no fallback.
+ *  4. App.tsx saves immediately after loading, which means a lossy migrate() is
+ *     destructive on the first launch of an update. Anything dropped is gone.
+ */
 const KEY = 'maintenance-tracker/v1';
 const SCHEMA_VERSION = 2;
 
