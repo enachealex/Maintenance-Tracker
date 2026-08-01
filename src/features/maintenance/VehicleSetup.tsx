@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { getMakes, getModels, getTrims, getYears, MakeInfo, TrimInfo } from '../api/vehicles';
-import { Button, Card, Field, Screen, SelectField } from '../components/ui';
-import { colors, spacing } from '../theme';
-import { Vehicle } from '../types';
+import { getMakes, getModels, getTrims, getYears, MakeInfo, TrimInfo } from '../../core/vehicles';
+import { Button, Card, Field, Screen, SelectField } from '../../components/ui';
+import { colors, spacing } from '../../theme';
+import { Vehicle } from '../../core/types';
 
 export default function VehicleSetup({
   onDone,

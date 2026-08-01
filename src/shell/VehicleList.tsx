@@ -3,9 +3,9 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import { Button, Card, Screen } from '../components/ui';
 import NotificationPrompt from '../components/NotificationPrompt';
 import { colors, spacing } from '../theme';
-import { dueCount, fmtMiles, vehicleName } from '../logic';
-import { cadenceLabel, isMileageStale } from '../cadence';
-import { VehicleRecord } from '../types';
+import { dueCount, fmtMiles, vehicleName } from '../features/maintenance/logic';
+import { cadenceLabel, isMileageStale } from '../features/maintenance/cadence';
+import { VehicleRecord } from '../core/types';
 
 export default function Home({
   vehicles,

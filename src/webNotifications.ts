@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
-import { AppData } from './types';
-import { dueCount, vehicleName } from './logic';
-import { cadenceDays, maintenanceCadenceDays } from './cadence';
+import { AppData } from './core/types';
+import { dueCount, vehicleName } from './features/maintenance/logic';
+import { cadenceDays, maintenanceCadenceDays } from './features/maintenance/cadence';
 import { PUSH_SERVER_URL, VAPID_PUBLIC_KEY } from './pushConfig';
 
 /**

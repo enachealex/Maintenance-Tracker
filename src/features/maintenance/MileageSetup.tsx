@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { OIL_TYPES, scheduleFor } from '../logic';
-import { Button, Card, Field, Screen } from '../components/ui';
-import { colors, spacing } from '../theme';
-import { OilType, ScheduleItem, Vehicle } from '../types';
+import { OIL_TYPES, scheduleFor } from './logic';
+import { Button, Card, Field, Screen } from '../../components/ui';
+import { colors, spacing } from '../../theme';
+import { OilType, ScheduleItem, Vehicle } from '../../core/types';
 
 export type HistoryChoice = 'recent' | 'while-ago' | 'unknown';
 

@@ -1,4 +1,4 @@
-import { MileageCadence, VehicleRecord } from './types';
+import { MileageCadence, VehicleRecord } from '../../core/types';
 
 export const CADENCE_OPTIONS: { key: MileageCadence; label: string }[] = [
   { key: 'daily', label: 'Daily' },

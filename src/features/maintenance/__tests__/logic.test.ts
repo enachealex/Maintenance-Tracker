@@ -9,8 +9,8 @@ import {
   scheduleFor,
   setLastDone,
 } from '../logic';
-import { newVehicleRecord } from '../storage';
-import { Vehicle, VehicleRecord } from '../types';
+import { newVehicleRecord } from '../../../core/storage';
+import { Vehicle, VehicleRecord } from '../../../core/types';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),

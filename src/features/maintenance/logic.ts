@@ -1,6 +1,6 @@
-import { SCHEDULE } from './data/schedule';
-import { genId } from './storage';
-import { ComputedTask, OilType, ScheduleItem, TaskState, TaskStatus, VehicleRecord } from './types';
+import { SCHEDULE } from './schedule';
+import { genId } from '../../core/storage';
+import { ComputedTask, OilType, ScheduleItem, TaskState, TaskStatus, VehicleRecord } from '../../core/types';
 
 /** Oil-change interval by oil type. Synthetic Blend is the pre-oilType default. */
 export const OIL_TYPES: Record<OilType, { label: string; intervalMiles: number }> = {

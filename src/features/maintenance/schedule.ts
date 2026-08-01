@@ -1,4 +1,4 @@
-import { ScheduleItem } from '../types';
+import { ScheduleItem } from '../../core/types';
 
 /**
  * Generic manufacturer-typical maintenance intervals (miles).

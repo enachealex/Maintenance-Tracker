@@ -8,11 +8,11 @@ import {
   isCustomItem,
   oilTypeOf,
   vehicleName,
-} from '../logic';
-import { CADENCE_OPTIONS, daysSinceMileageUpdate, isMileageStale } from '../cadence';
-import { Button, Card, Field, Screen, SelectField } from '../components/ui';
-import { colors, spacing } from '../theme';
-import { ComputedTask, MileageCadence, OilType, VehicleRecord } from '../types';
+} from './logic';
+import { CADENCE_OPTIONS, daysSinceMileageUpdate, isMileageStale } from './cadence';
+import { Button, Card, Field, Screen, SelectField } from '../../components/ui';
+import { colors, spacing } from '../../theme';
+import { ComputedTask, MileageCadence, OilType, VehicleRecord } from '../../core/types';
 
 const OIL_TYPE_KEYS: OilType[] = ['synthetic-blend', 'full-synthetic'];
 const oilTypeLabel = (t: OilType) =>

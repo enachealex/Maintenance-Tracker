@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { AppData, VehicleRecord } from './types';
-import { dueDescription, dueTasks, vehicleName } from './logic';
-import { cadenceDays, cadenceLabel, maintenanceCadenceDays } from './cadence';
+import { AppData, VehicleRecord } from './core/types';
+import { dueDescription, dueTasks, vehicleName } from './features/maintenance/logic';
+import { cadenceDays, cadenceLabel, maintenanceCadenceDays } from './features/maintenance/cadence';
 
 const supported = Platform.OS !== 'web';
 

@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/types';
-import { DEFAULT_DATA, loadData, newVehicleRecord, parseBackup, saveData } from './src/storage';
+import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/core/types';
+import { DEFAULT_DATA, loadData, newVehicleRecord, parseBackup, saveData } from './src/core/storage';
 import {
   addCustomItem,
   completeTask,
@@ -10,9 +10,9 @@ import {
   removeCustomItem,
   scheduleFor,
   setLastDone,
-} from './src/logic';
+} from './src/features/maintenance/logic';
 import { addNotificationResponseListener, syncAllReminders } from './src/notifications';
-import { BACKUP_IMPORT_SUPPORTED, exportBackup, pickBackupFile } from './src/backup';
+import { BACKUP_IMPORT_SUPPORTED, exportBackup, pickBackupFile } from './src/core/backup';
 import {
   addWebNotificationTapListener,
   getInitialWebNav,
@@ -23,10 +23,10 @@ import {
 } from './src/webNotifications';
 import { setupWebViewport } from './src/webViewport';
 import { colors } from './src/theme';
-import Home from './src/screens/Home';
-import VehicleSetup from './src/screens/VehicleSetup';
-import MileageSetup, { MileageSetupResult } from './src/screens/MileageSetup';
-import Dashboard from './src/screens/Dashboard';
+import Home from './src/shell/VehicleList';
+import VehicleSetup from './src/features/maintenance/VehicleSetup';
+import MileageSetup, { MileageSetupResult } from './src/features/maintenance/MileageSetup';
+import Dashboard from './src/features/maintenance/Dashboard';
 
 type Nav =
   | { screen: 'home' }
