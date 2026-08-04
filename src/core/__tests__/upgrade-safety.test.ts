@@ -206,6 +206,104 @@ describe('older installs still upgrade', () => {
   });
 });
 
+describe('the Wheels feature cannot disturb existing data', () => {
+  /**
+   * VehicleRecord.wheels is optional with no default backfilled in migrate().
+   * A record saved before the feature existed must come back with no trace of
+   * it — not an empty object, not a null. That is what keeps this addition
+   * provably non-destructive.
+   */
+  it('leaves records saved before the feature completely untouched', async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fullData));
+    const loaded = await loadData();
+    expect(loaded).toEqual(fullData);
+    expect('wheels' in loaded.vehicles[0]).toBe(false);
+  });
+
+  it('does not invent a wheels object during migration', async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fullData));
+    await saveData(await loadData());
+    const raw = JSON.parse((await AsyncStorage.getItem(STORAGE_KEY))!);
+    expect(raw.vehicles[0].wheels).toBeUndefined();
+  });
+
+  it('round-trips wheels data once the user has actually used the feature', async () => {
+    const withWheels = {
+      ...fullData,
+      vehicles: [
+        {
+          ...fullRecord(),
+          wheels: {
+            placardTireSize: '225/45R17',
+            photo: {
+              uri: 'file:///photos/car.jpg',
+              calibration: {
+                pixelsPerInch: 20.02,
+                centerX: 640,
+                centerY: 480,
+                imageWidth: 1600,
+                imageHeight: 1200,
+              },
+              fittedTireSize: '235/40R18',
+              createdAt: '2026-07-04T00:00:00.000Z',
+            },
+            builds: [
+              {
+                id: 'b1',
+                name: 'Summer 19s',
+                tireSize: '245/35R19',
+                createdAt: '2026-07-05T00:00:00.000Z',
+              },
+            ],
+          },
+        },
+      ],
+    };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(withWheels));
+    const loaded = await loadData();
+    expect(loaded).toEqual(withWheels);
+  });
+
+  it('survives a save-back cycle with wheels data intact', async () => {
+    const withWheels = {
+      ...fullData,
+      vehicles: [{ ...fullRecord(), wheels: { builds: [], placardTireSize: '225/45R17' } }],
+    };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(withWheels));
+    await saveData(await loadData());
+    expect(await loadData()).toEqual(withWheels);
+  });
+
+  it('keeps the photo URI local — nothing rewrites it to a remote address', async () => {
+    const withWheels = {
+      ...fullData,
+      vehicles: [
+        {
+          ...fullRecord(),
+          wheels: {
+            builds: [],
+            photo: {
+              uri: 'file:///photos/car.jpg',
+              calibration: {
+                pixelsPerInch: 20,
+                centerX: 1,
+                centerY: 1,
+                imageWidth: 10,
+                imageHeight: 10,
+              },
+              fittedTireSize: '225/45R17',
+              createdAt: '2026-07-04T00:00:00.000Z',
+            },
+          },
+        },
+      ],
+    };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(withWheels));
+    const photo = (await loadData()).vehicles[0].wheels!.photo!;
+    expect(photo.uri.startsWith('file://')).toBe(true);
+  });
+});
+
 describe('the Phase 1 shell did not change the persisted shape', () => {
   it('writes only the three known top-level keys', async () => {
     await saveData(fullData);

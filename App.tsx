@@ -34,6 +34,7 @@ import TabBar from './src/shell/TabBar';
 import HomeHub from './src/shell/HomeHub';
 import MaintenanceTab from './src/features/maintenance/MaintenanceTab';
 import WheelsTab from './src/features/wheels/WheelsTab';
+import { setPhoto, setPlacardSize } from './src/features/wheels/logic';
 import VehicleSetup from './src/features/maintenance/VehicleSetup';
 import MileageSetup, { MileageSetupResult } from './src/features/maintenance/MileageSetup';
 import Dashboard from './src/features/maintenance/Dashboard';
@@ -266,6 +267,8 @@ export default function App() {
           onSelectVehicle={(id) => go({ screen: 'wheels', vehicleId: id })}
           onClearSelection={() => go({ screen: 'wheels' })}
           onAddVehicle={() => go({ screen: 'add-vehicle', from: 'wheels' })}
+          onSetPhoto={(id, photo) => updateVehicle(id, (r) => setPhoto(r, photo))}
+          onSetPlacardSize={(id, size) => updateVehicle(id, (r) => setPlacardSize(r, size))}
         />
       );
       break;

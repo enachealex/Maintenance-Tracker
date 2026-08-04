@@ -18,5 +18,15 @@ export {
   trueSpeed,
   speedometerErrorPercent,
 } from './geometry';
+export {
+  pixelsPerInch,
+  layoutFor,
+  rimScaleFactor,
+  occludesOriginal,
+  exposedRingPx,
+  scaleCalibration,
+  RIM_FLANGE_ALLOWANCE_IN,
+} from './render';
+export type { WheelLayout, CalibrationReference } from './render';
 export { compareFitment, worstLevel, THRESHOLDS } from './compare';
 export type { CompareInput } from './compare';
