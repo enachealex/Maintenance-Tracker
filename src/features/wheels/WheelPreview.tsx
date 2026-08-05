@@ -1,8 +1,9 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../theme';
-import { compositeLayersFor, layoutFor, parseTireSize, scaleCalibration } from '../../core/fitment';
+import { compositeLayersFor, parseTireSize, scaleCalibration } from '../../core/fitment';
 import { VehiclePhoto } from '../../core/types';
+import { usePhotoUri } from './usePhotoUri';
 
 /**
  * Profile composite, built entirely from the user's own photo.
@@ -31,6 +32,7 @@ export default function WheelPreview({
   proposedSize: string | null;
   width: number;
 }) {
+  const uri = usePhotoUri(photo.uri);
   const fitted = parseTireSize(photo.fittedTireSize);
   const proposed = proposedSize ? parseTireSize(proposedSize) : null;
 
@@ -40,10 +42,18 @@ export default function WheelPreview({
       : 0.75;
   const height = width * aspect;
 
+  if (!uri) {
+    return (
+      <View style={[styles.frame, styles.placeholder, { width, height }]}>
+        <Text style={styles.placeholderText}>Loading photo…</Text>
+      </View>
+    );
+  }
+
   if (!fitted || !proposed) {
     return (
       <View style={[styles.frame, { width, height }]}>
-        <Image source={{ uri: photo.uri }} style={{ width, height }} resizeMode="cover" />
+        <Image source={{ uri }} style={{ width, height }} resizeMode="cover" />
       </View>
     );
   }
@@ -68,7 +78,7 @@ export default function WheelPreview({
       ]}
     >
       <Image
-        source={{ uri: photo.uri }}
+        source={{ uri }}
         style={{
           width: width * k,
           height: height * k,
@@ -82,7 +92,7 @@ export default function WheelPreview({
 
   return (
     <View style={[styles.frame, { width, height }]}>
-      <Image source={{ uri: photo.uri }} style={{ width, height }} resizeMode="cover" />
+      <Image source={{ uri }} style={{ width, height }} resizeMode="cover" />
 
       {/* Hide the original wherever the new setup is smaller. The arch is dark
           anyway, so a flat disc reads as shadow rather than as a hole. */}
@@ -150,6 +160,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   circle: { position: 'absolute' },
+  placeholder: { alignItems: 'center', justifyContent: 'center' },
+  placeholderText: { color: colors.textDim, fontSize: 13 },
   disclaimer: {
     color: colors.textDim,
     fontSize: 12,

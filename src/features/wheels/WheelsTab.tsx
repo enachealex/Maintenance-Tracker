@@ -10,6 +10,7 @@ import { canVisualize, fittedSizeOf, suggestedSizes, wheelsOf } from './logic';
 import TireSizeInput from './TireSizeInput';
 import WheelPreview, { PreviewDisclaimer } from './WheelPreview';
 import CalibrateScreen from './CalibrateScreen';
+import { deleteVehiclePhoto, persistVehiclePhoto } from '../../core/photoStore';
 
 /**
  * Wheels tab: pick a vehicle, calibrate one photo of it, then try tire sizes.
@@ -80,8 +81,20 @@ export default function WheelsTab({
     return (
       <CalibrateScreen
         initialFittedSize={fitted ?? ''}
-        onDone={(photo) => {
-          onSetPhoto(selected.id, photo);
+        onDone={async (photo) => {
+          // The picker's URI is session-only (blob: on web, cache dir on
+          // native). Move the bytes somewhere durable and persist that
+          // reference instead — photo bytes never enter AppData.
+          const previous = wheelsOf(selected).photo?.uri;
+          try {
+            const stored = await persistVehiclePhoto(selected.id, photo.uri);
+            onSetPhoto(selected.id, { ...photo, uri: stored });
+            if (previous && previous !== stored) deleteVehiclePhoto(previous);
+          } catch {
+            // Keep the calibration rather than losing the user's work; the
+            // session URI still renders until the app closes.
+            onSetPhoto(selected.id, photo);
+          }
           setCalibrating(false);
         }}
         onCancel={() => setCalibrating(false)}

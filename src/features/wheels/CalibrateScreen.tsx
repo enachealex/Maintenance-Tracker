@@ -90,7 +90,13 @@ export default function CalibrateScreen({
    * calibration point into NaN on web. pageX/pageY exist on both platforms.
    */
   const onTap = (e: GestureResponderEvent) => {
-    const { pageX, pageY } = e.nativeEvent;
+    // Mouse events carry pageX directly; touch events carry it on the touch.
+    const ne = e.nativeEvent as GestureResponderEvent['nativeEvent'] & {
+      changedTouches?: Array<{ pageX: number; pageY: number }>;
+    };
+    const pageX = ne.pageX ?? ne.changedTouches?.[0]?.pageX;
+    const pageY = ne.pageY ?? ne.changedTouches?.[0]?.pageY;
+    if (pageX == null || pageY == null || !Number.isFinite(pageX + pageY)) return;
     frameRef.current?.measureInWindow((fx, fy) => {
       const p = { x: pageX - fx, y: pageY - fy };
       if (!center || edge) {

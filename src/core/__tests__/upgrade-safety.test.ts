@@ -274,6 +274,38 @@ describe('the Wheels feature cannot disturb existing data', () => {
     expect(await loadData()).toEqual(withWheels);
   });
 
+  /**
+   * Photo BYTES must never enter AppData. The record stores a small reference
+   * (idb: key on web, file:// path on native) — localStorage tops out around
+   * 5MB, and one giant record would make every subsequent save fail,
+   * including maintenance edits. The reference must survive a round-trip
+   * exactly as written.
+   */
+  it('round-trips a photo-store reference untouched', async () => {
+    const withStoreRef = {
+      ...fullData,
+      vehicles: [
+        {
+          ...fullRecord(),
+          wheels: {
+            builds: [],
+            photo: {
+              uri: 'idb:veh-1',
+              calibration: { pixelsPerInch: 20, centerX: 1, centerY: 1, imageWidth: 10, imageHeight: 10 },
+              fittedTireSize: '225/45R17',
+              createdAt: '2026-07-04T00:00:00.000Z',
+            },
+          },
+        },
+      ],
+    };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(withStoreRef));
+    await saveData(await loadData());
+    const loaded = await loadData();
+    expect(loaded).toEqual(withStoreRef);
+    expect(loaded.vehicles[0].wheels!.photo!.uri).toBe('idb:veh-1');
+  });
+
   it('keeps the photo URI local — nothing rewrites it to a remote address', async () => {
     const withWheels = {
       ...fullData,
