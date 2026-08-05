@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Field } from '../../components/ui';
 import { colors, spacing } from '../../theme';
 import { FitmentWarning, geometryOf, parseTireSize, validateTireSize } from '../../core/fitment';
+import { SizeField, stepTireSize } from './logic';
 
 /**
  * Tire size entry with live feedback.
@@ -18,17 +19,32 @@ export default function TireSizeInput({
   onChangeText,
   suggestions,
   hint,
+  stepperBase,
 }: {
   label: string;
   value: string;
   onChangeText: (t: string) => void;
   suggestions?: string[];
   hint?: string;
+  /**
+   * Enables the width/sidewall/wheel steppers. When the field is empty, the
+   * first step starts from this size — so one tap turns the fitted size into
+   * the working size instead of doing nothing.
+   */
+  stepperBase?: string;
 }) {
   const size = parseTireSize(value);
   const warnings: FitmentWarning[] = size ? validateTireSize(size) : [];
   const geometry = size ? geometryOf(size) : null;
   const unreadable = value.trim().length > 0 && !size;
+
+  // What the stepper row displays: the working size, or the base it would
+  // start from. Hidden entirely for flotation sizes, which don't step.
+  const stepperShown = size ?? (stepperBase ? parseTireSize(stepperBase) : null);
+  const step = (field: SizeField, direction: 1 | -1) => {
+    const next = stepTireSize(value, field, direction, stepperBase);
+    if (next) onChangeText(next);
+  };
 
   return (
     <View>
@@ -40,6 +56,26 @@ export default function TireSizeInput({
       />
 
       {hint && !value.trim() && <Text style={styles.hint}>{hint}</Text>}
+
+      {stepperBase && stepperShown && stepperShown.kind === 'metric' && (
+        <View style={styles.steppers}>
+          <Stepper
+            label="Width"
+            display={`${Math.round(stepperShown.sectionWidthMm)}`}
+            onStep={(d) => step('width', d)}
+          />
+          <Stepper
+            label="Sidewall"
+            display={`${Math.round(stepperShown.aspectRatio)}`}
+            onStep={(d) => step('aspect', d)}
+          />
+          <Stepper
+            label="Wheel"
+            display={`${stepperShown.rimDiameterIn}"`}
+            onStep={(d) => step('rim', d)}
+          />
+        </View>
+      )}
 
       {suggestions && suggestions.length > 0 && (
         <View style={styles.chips}>
@@ -85,8 +121,71 @@ export default function TireSizeInput({
   );
 }
 
+/** One −/value/+ control. The value is display-only; the buttons do the work. */
+function Stepper({
+  label,
+  display,
+  onStep,
+}: {
+  label: string;
+  display: string;
+  onStep: (direction: 1 | -1) => void;
+}) {
+  return (
+    <View style={styles.stepper}>
+      <Text style={styles.stepperLabel}>{label}</Text>
+      <View style={styles.stepperRow}>
+        <Pressable
+          onPress={() => onStep(-1)}
+          accessibilityRole="button"
+          accessibilityLabel={`${label} down`}
+          style={({ pressed }) => [styles.stepBtn, pressed && { opacity: 0.5 }]}
+        >
+          <Text style={styles.stepBtnText}>−</Text>
+        </Pressable>
+        <Text style={styles.stepperValue}>{display}</Text>
+        <Pressable
+          onPress={() => onStep(1)}
+          accessibilityRole="button"
+          accessibilityLabel={`${label} up`}
+          style={({ pressed }) => [styles.stepBtn, pressed && { opacity: 0.5 }]}
+        >
+          <Text style={styles.stepBtnText}>＋</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   hint: { color: colors.textDim, fontSize: 12, marginTop: -spacing.sm, marginBottom: spacing.sm },
+  steppers: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  stepper: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    gap: 4,
+  },
+  stepperLabel: { color: colors.textDim, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stepBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnText: { color: colors.accent, fontSize: 17, fontWeight: '800' },
+  stepperValue: { color: colors.text, fontSize: 15, fontWeight: '800', minWidth: 34, textAlign: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
   chip: {
     borderWidth: 1,

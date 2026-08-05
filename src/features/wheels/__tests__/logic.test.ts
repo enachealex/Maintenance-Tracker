@@ -1,5 +1,6 @@
 import {
   addBuild,
+  stepTireSize,
   canVisualize,
   clearPhoto,
   fittedSizeOf,
@@ -165,5 +166,41 @@ describe('suggestedSizes', () => {
       expect(aspect).toBeGreaterThanOrEqual(25);
       expect(aspect).toBeLessThanOrEqual(85);
     }
+  });
+});
+
+describe('stepTireSize', () => {
+  it('steps width by 10mm, aspect by 5, rim by 1"', () => {
+    expect(stepTireSize('225/45R17', 'width', 1)).toBe('235/45R17');
+    expect(stepTireSize('225/45R17', 'aspect', -1)).toBe('225/40R17');
+    expect(stepTireSize('225/45R17', 'rim', 1)).toBe('225/45R18');
+  });
+
+  it('starts from the fallback when the current value is empty or unreadable', () => {
+    expect(stepTireSize('', 'rim', 1, '225/45R17')).toBe('225/45R18');
+    expect(stepTireSize('garbage', 'width', -1, '225/45R17')).toBe('215/45R17');
+  });
+
+  it('clamps at the edge of the plausible range', () => {
+    expect(stepTireSize('105/45R17', 'width', -1)).toBeNull();
+    expect(stepTireSize('225/20R17', 'aspect', -1)).toBeNull();
+    expect(stepTireSize('225/45R30', 'rim', 1)).toBeNull();
+  });
+
+  it('does not step flotation sizes', () => {
+    expect(stepTireSize('33x12.50R17', 'rim', 1)).toBeNull();
+  });
+
+  it('returns null with no base at all', () => {
+    expect(stepTireSize('', 'rim', 1)).toBeNull();
+  });
+
+  it('drops load and speed markings rather than carrying unchecked ratings', () => {
+    expect(stepTireSize('225/45R17 91V', 'rim', 1)).toBe('225/45R18');
+  });
+
+  it('round-trips through the parser', () => {
+    const out = stepTireSize('265/35R19', 'aspect', 1)!;
+    expect(out).toBe('265/40R19');
   });
 });

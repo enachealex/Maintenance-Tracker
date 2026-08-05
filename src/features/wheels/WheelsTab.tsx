@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Button, Card, Screen } from '../../components/ui';
 import { colors, spacing } from '../../theme';
@@ -41,6 +41,14 @@ export default function WheelsTab({
 
   const [calibrating, setCalibrating] = useState(false);
   const [proposed, setProposed] = useState('');
+
+  // The working size belongs to a vehicle, not to the tab. Without this, the
+  // size being tried on one car silently carries over when switching to
+  // another — and the steppers then step from the wrong base.
+  useEffect(() => {
+    setProposed('');
+    setCalibrating(false);
+  }, [selectedId]);
 
   if (!selected) {
     return (
@@ -137,6 +145,7 @@ export default function WheelsTab({
             onChangeText={setProposed}
             suggestions={fitted ? suggestedSizes(fitted) : []}
             hint="Try a suggestion, or type any size — including one nobody sells."
+            stepperBase={fitted ?? undefined}
           />
 
           {comparison && (

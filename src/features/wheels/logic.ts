@@ -81,3 +81,43 @@ export function suggestedSizes(fitted: string): string[] {
   }
   return out;
 }
+
+/** The dimension a stepper adjusts. */
+export type SizeField = 'width' | 'aspect' | 'rim';
+
+/**
+ * Step one dimension of a metric size by the increment the industry actually
+ * sells: widths in 10mm, aspect ratios in 5, wheels in whole inches. Clamped to
+ * the plausible range rather than allowed to run off into nonsense.
+ *
+ * When `current` is unreadable (or empty), stepping starts from `fallback` —
+ * so the first tap on a stepper turns the fitted size into the working size
+ * instead of doing nothing.
+ *
+ * Returns null when there is nothing to step: no readable base, a flotation
+ * size (whose dimensions do not move in these increments), or a step that
+ * would leave the plausible range.
+ */
+export function stepTireSize(
+  current: string,
+  field: SizeField,
+  direction: 1 | -1,
+  fallback?: string,
+): string | null {
+  const base = parseTireSize(current) ?? (fallback ? parseTireSize(fallback) : null);
+  if (!base || base.kind !== 'metric') return null;
+
+  let { sectionWidthMm, aspectRatio, rimDiameterIn } = base;
+  if (field === 'width') sectionWidthMm += 10 * direction;
+  if (field === 'aspect') aspectRatio += 5 * direction;
+  if (field === 'rim') rimDiameterIn += 1 * direction;
+
+  if (sectionWidthMm < 105 || sectionWidthMm > 405) return null;
+  if (aspectRatio < 20 || aspectRatio > 85) return null;
+  if (rimDiameterIn < 10 || rimDiameterIn > 30) return null;
+
+  // Plain string rather than formatTireSize: steppers describe a size being
+  // browsed, so carrying over the base size's load/speed markings would claim
+  // ratings the new size was never checked against.
+  return `${sectionWidthMm}/${aspectRatio}R${rimDiameterIn}`;
+}
