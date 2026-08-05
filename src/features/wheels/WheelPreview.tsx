@@ -1,27 +1,25 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../theme';
-import {
-  geometryOf,
-  layoutFor,
-  parseTireSize,
-  rimScaleFactor,
-  scaleCalibration,
-} from '../../core/fitment';
+import { compositeLayersFor, layoutFor, parseTireSize, scaleCalibration } from '../../core/fitment';
 import { VehiclePhoto } from '../../core/types';
 
 /**
- * Profile composite.
+ * Profile composite, built entirely from the user's own photo.
  *
- * No wheel catalog in v1, so a size change is shown by re-scaling the user's
- * own wheel — clipped out of their photo by a circular container — and drawing
- * a fresh sidewall around it at the new height (§4a). Their actual wheel, at
- * the proportions of the size they are considering.
+ * Both the wheel AND the tire are clipped out of the photo and rescaled —
+ * their actual rim, their actual rubber, sidewall sheen and tread shoulder
+ * included. A size change is not a uniform scale of a tire (plus-one keeps
+ * the outside, grows the hole), so the two are scaled independently and the
+ * wheel draws over the tire's middle: a thinner sidewall emerges from the
+ * bigger wheel covering more rubber, which is what plus-sizing physically
+ * does. The layer recipe — scales, clip radii, and the dark patch band for
+ * the taller-sidewall case — comes from core/fitment/render.ts, where it is
+ * unit-tested.
  *
- * Square-on means a wheel is a circle, so this is all scale and position: no
- * perspective transform, and no native image manipulation. Clipping is a
- * rounded `overflow: hidden` container with the photo offset inside it, which
- * behaves identically on iOS, Android, and react-native-web.
+ * Square-on means every layer is scale + circular clip (`overflow: hidden` on
+ * a rounded container): no perspective transform, no native image processing,
+ * identical on iOS, Android, and react-native-web.
  */
 export default function WheelPreview({
   photo,
@@ -42,7 +40,7 @@ export default function WheelPreview({
       : 0.75;
   const height = width * aspect;
 
-  if (!fitted) {
+  if (!fitted || !proposed) {
     return (
       <View style={[styles.frame, { width, height }]}>
         <Image source={{ uri: photo.uri }} style={{ width, height }} resizeMode="cover" />
@@ -51,87 +49,85 @@ export default function WheelPreview({
   }
 
   const cal = scaleCalibration(photo.calibration, width);
-  const fittedLayout = layoutFor(fitted, cal.pixelsPerInch, cal.centerX, cal.centerY);
+  const layers = compositeLayersFor(fitted, proposed, cal.pixelsPerInch);
+  const { centerX, centerY } = cal;
 
-  if (!proposed) {
-    return (
-      <View style={[styles.frame, { width, height }]}>
-        <Image source={{ uri: photo.uri }} style={{ width, height }} resizeMode="cover" />
-      </View>
-    );
-  }
-
-  const layout = layoutFor(proposed, cal.pixelsPerInch, cal.centerX, cal.centerY);
-  const rimScale = rimScaleFactor(fitted, proposed);
-
-  // Cover whichever tire is larger, so a smaller proposed size cannot leave a
-  // ring of the original showing through.
-  const coverRadius = Math.max(fittedLayout.tireRadiusPx, layout.tireRadiusPx) + 1;
+  /** The photo scaled by `k` about the wheel centre, clipped to a disc. */
+  const clippedPhoto = (k: number, clipRadiusPx: number) => (
+    <View
+      style={[
+        styles.circle,
+        {
+          left: centerX - clipRadiusPx,
+          top: centerY - clipRadiusPx,
+          width: clipRadiusPx * 2,
+          height: clipRadiusPx * 2,
+          borderRadius: clipRadiusPx,
+          overflow: 'hidden',
+        },
+      ]}
+    >
+      <Image
+        source={{ uri: photo.uri }}
+        style={{
+          width: width * k,
+          height: height * k,
+          marginLeft: -(centerX * k - clipRadiusPx),
+          marginTop: -(centerY * k - clipRadiusPx),
+        }}
+        resizeMode="cover"
+      />
+    </View>
+  );
 
   return (
     <View style={[styles.frame, { width, height }]}>
       <Image source={{ uri: photo.uri }} style={{ width, height }} resizeMode="cover" />
 
-      {/* Mask the original wheel and tire. The arch is dark anyway, so a plain
-          disc reads as shadow rather than as a hole. */}
+      {/* Hide the original wherever the new setup is smaller. The arch is dark
+          anyway, so a flat disc reads as shadow rather than as a hole. */}
       <View
         style={[
           styles.circle,
           {
-            left: cal.centerX - coverRadius,
-            top: cal.centerY - coverRadius,
-            width: coverRadius * 2,
-            height: coverRadius * 2,
-            borderRadius: coverRadius,
+            left: centerX - layers.coverRadiusPx,
+            top: centerY - layers.coverRadiusPx,
+            width: layers.coverRadiusPx * 2,
+            height: layers.coverRadiusPx * 2,
+            borderRadius: layers.coverRadiusPx,
             backgroundColor: '#0B0D12',
           },
         ]}
       />
 
-      {/* The new tire: a rubber annulus drawn as a thick border, so its
-          thickness is literally the sidewall height at this scale. */}
-      <View
-        style={[
-          styles.circle,
-          {
-            left: layout.centerX - layout.tireRadiusPx,
-            top: layout.centerY - layout.tireRadiusPx,
-            width: layout.tireRadiusPx * 2,
-            height: layout.tireRadiusPx * 2,
-            borderRadius: layout.tireRadiusPx,
-            borderWidth: Math.max(1, layout.sidewallPx),
-            borderColor: '#15181F',
-            backgroundColor: 'transparent',
-          },
-        ]}
-      />
+      {/* Their actual tire, rescaled so its outer edge lands at the new OD. */}
+      {clippedPhoto(layers.tire.scale, layers.tire.clipRadiusPx)}
 
-      {/* The user's own wheel, clipped to a circle and rescaled to the new rim
-          diameter. */}
-      <View
-        style={[
-          styles.circle,
-          {
-            left: layout.centerX - layout.rimLipRadiusPx,
-            top: layout.centerY - layout.rimLipRadiusPx,
-            width: layout.rimLipRadiusPx * 2,
-            height: layout.rimLipRadiusPx * 2,
-            borderRadius: layout.rimLipRadiusPx,
-            overflow: 'hidden',
-          },
-        ]}
-      >
-        <Image
-          source={{ uri: photo.uri }}
-          style={{
-            width: width * rimScale,
-            height: height * rimScale,
-            marginLeft: -(cal.centerX * rimScale - layout.rimLipRadiusPx),
-            marginTop: -(cal.centerY * rimScale - layout.rimLipRadiusPx),
-          }}
-          resizeMode="cover"
+      {/* Taller-sidewall case only: cover the scaled photo's rim-lip ghost with
+          flat rubber tone, right at the rim where real sidewalls are darkest. */}
+      {layers.innerPatch && (
+        <View
+          style={[
+            styles.circle,
+            {
+              left: centerX - layers.innerPatch.outerRadiusPx,
+              top: centerY - layers.innerPatch.outerRadiusPx,
+              width: layers.innerPatch.outerRadiusPx * 2,
+              height: layers.innerPatch.outerRadiusPx * 2,
+              borderRadius: layers.innerPatch.outerRadiusPx,
+              borderWidth: Math.max(
+                1,
+                layers.innerPatch.outerRadiusPx - layers.innerPatch.innerRadiusPx,
+              ),
+              borderColor: '#15181F',
+              backgroundColor: 'transparent',
+            },
+          ]}
         />
-      </View>
+      )}
+
+      {/* Their actual wheel, rescaled to the new rim diameter, over the top. */}
+      {clippedPhoto(layers.wheel.scale, layers.wheel.clipRadiusPx)}
     </View>
   );
 }
@@ -140,8 +136,8 @@ export default function WheelPreview({
 export function PreviewDisclaimer() {
   return (
     <Text style={styles.disclaimer}>
-      Your own wheel, shown at the size you're considering. It's accurate for diameter and
-      sidewall — it isn't a picture of a different wheel design.
+      Your own wheel and tire, resized to the size you're considering — accurate for diameter
+      and sidewall. Choosing a different wheel design comes later.
     </Text>
   );
 }

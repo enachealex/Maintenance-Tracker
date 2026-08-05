@@ -1,7 +1,9 @@
 import { geometryOf } from '../geometry';
 import {
+  compositeLayersFor,
   exposedRingPx,
   layoutFor,
+  tireScaleFactor,
   occludesOriginal,
   pixelsPerInch,
   RIM_FLANGE_ALLOWANCE_IN,
@@ -177,5 +179,87 @@ describe('scaleCalibration', () => {
     const atDisplay = layoutFor(tire, s.pixelsPerInch, s.centerX, s.centerY);
     expect(atDisplay.tireRadiusPx).toBeCloseTo(atImage.tireRadiusPx / 2, 6);
     expect(atDisplay.centerX).toBeCloseTo(atImage.centerX / 2, 6);
+  });
+});
+
+describe('tireScaleFactor', () => {
+  it('is one for the same size', () => {
+    expect(tireScaleFactor(size('225/45R17'), size('225/45R17'))).toBeCloseTo(1, 6);
+  });
+
+  it('is near one on a proper plus-one — the whole point of plus sizing', () => {
+    expect(tireScaleFactor(size('225/45R17'), size('225/40R18'))).toBeCloseTo(1, 1);
+  });
+
+  it('scales by OD ratio for a taller tire', () => {
+    const k = tireScaleFactor(size('225/45R17'), size('225/55R17'));
+    const expected =
+      geometryOf(size('225/55R17')).overallDiameterIn /
+      geometryOf(size('225/45R17')).overallDiameterIn;
+    expect(k).toBeCloseTo(expected, 6);
+    expect(k).toBeGreaterThan(1.05);
+  });
+});
+
+describe('compositeLayersFor', () => {
+  const PPI = 20;
+
+  it('is the identity recipe for an unchanged size', () => {
+    const l = compositeLayersFor(size('225/45R17'), size('225/45R17'), PPI);
+    expect(l.tire.scale).toBeCloseTo(1, 6);
+    expect(l.wheel.scale).toBeCloseTo(1, 6);
+    expect(l.innerPatch).toBeNull();
+  });
+
+  it('lands the tire clip exactly at the proposed overall radius', () => {
+    const l = compositeLayersFor(size('225/45R17'), size('225/55R17'), PPI);
+    const expected = layoutFor(size('225/55R17'), PPI, 0, 0).tireRadiusPx;
+    expect(l.tire.clipRadiusPx).toBeCloseTo(expected, 6);
+  });
+
+  /**
+   * Plus-one: the bigger wheel covers the scaled photo's rim-lip pixels, so
+   * no patch is needed — the thin sidewall is real rubber all the way in.
+   */
+  it('needs no patch on a plus-one', () => {
+    const l = compositeLayersFor(size('225/45R17'), size('225/40R18'), PPI);
+    expect(l.innerPatch).toBeNull();
+  });
+
+  it('patches the ghost band when the sidewall gets taller', () => {
+    const l = compositeLayersFor(size('225/45R17'), size('225/55R17'), PPI);
+    expect(l.innerPatch).not.toBeNull();
+    // The band starts at the new wheel edge and ends past the scaled lip.
+    expect(l.innerPatch!.innerRadiusPx).toBeCloseTo(l.wheel.clipRadiusPx, 6);
+    expect(l.innerPatch!.outerRadiusPx).toBeGreaterThan(l.innerPatch!.innerRadiusPx);
+    expect(l.innerPatch!.outerRadiusPx).toBeLessThanOrEqual(l.tire.clipRadiusPx);
+  });
+
+  it('patches when the wheel shrinks on the same tire family', () => {
+    const l = compositeLayersFor(size('225/40R18'), size('225/45R17'), PPI);
+    expect(l.innerPatch).not.toBeNull();
+  });
+
+  it('covers whichever tire is larger', () => {
+    const grow = compositeLayersFor(size('225/45R17'), size('255/55R17'), PPI);
+    const shrink = compositeLayersFor(size('255/55R17'), size('225/45R17'), PPI);
+    const bigR = layoutFor(size('255/55R17'), PPI, 0, 0).tireRadiusPx;
+    expect(grow.coverRadiusPx).toBeCloseTo(bigR + 1, 6);
+    expect(shrink.coverRadiusPx).toBeCloseTo(bigR + 1, 6);
+  });
+
+  it('keeps every radius finite and ordered', () => {
+    for (const [a, b] of [
+      ['225/45R17', '265/35R19'],
+      ['33x12.50R17', '35x12.50R20'],
+      ['225/45R17', '145/85R12'],
+    ] as const) {
+      const l = compositeLayersFor(size(a), size(b), PPI);
+      expect(Number.isFinite(l.coverRadiusPx)).toBe(true);
+      expect(l.wheel.clipRadiusPx).toBeLessThan(l.tire.clipRadiusPx);
+      if (l.innerPatch) {
+        expect(l.innerPatch.innerRadiusPx).toBeLessThan(l.innerPatch.outerRadiusPx);
+      }
+    }
   });
 });

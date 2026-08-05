@@ -98,6 +98,72 @@ export function rimScaleFactor(fitted: TireSize, proposed: TireSize): number {
 }
 
 /**
+ * How much to scale the tire cropped out of the user's photo, so its outer
+ * edge lands at the proposed overall diameter.
+ */
+export function tireScaleFactor(fitted: TireSize, proposed: TireSize): number {
+  const fittedOD = geometryOf(fitted).overallDiameterIn;
+  if (fittedOD <= 0) return 1;
+  return geometryOf(proposed).overallDiameterIn / fittedOD;
+}
+
+/**
+ * Layer recipe for compositing a proposed size out of the user's own photo.
+ *
+ * The insight that keeps this to plain scale-and-clip: a size change is not a
+ * uniform scale of the tire (plus-one keeps the outside, grows the hole), but
+ * it doesn't need to be. Scale the whole tire so its outer edge lands at the
+ * new OD, then draw the separately-scaled wheel over the middle. A thinner
+ * sidewall emerges from the bigger wheel covering more rubber — which is what
+ * plus-sizing physically does.
+ *
+ * `innerPatch` covers the one case that trick can't: when the sidewall gets
+ * taller (or the wheel smaller), the scaled photo's rim-lip pixels would show
+ * as a bright ghost ring between the new wheel edge and the real rubber. The
+ * patch is a flat dark annulus over exactly that band — placed where real
+ * sidewalls are darkest, so it blends.
+ */
+export interface CompositeLayers {
+  /** Flat disc hiding the original wheel+tire wherever the new one is smaller. */
+  coverRadiusPx: number;
+  /** Photo scaled by `scale`, clipped to a disc of `clipRadiusPx`: the tire. */
+  tire: { scale: number; clipRadiusPx: number };
+  /** Dark annulus [innerRadiusPx, outerRadiusPx], or null when fully covered. */
+  innerPatch: { innerRadiusPx: number; outerRadiusPx: number } | null;
+  /** Photo scaled by `scale`, clipped to a disc of `clipRadiusPx`: the wheel. */
+  wheel: { scale: number; clipRadiusPx: number };
+}
+
+export function compositeLayersFor(
+  fitted: TireSize,
+  proposed: TireSize,
+  scalePxPerIn: number,
+): CompositeLayers {
+  const fittedLayout = layoutFor(fitted, scalePxPerIn, 0, 0);
+  const layout = layoutFor(proposed, scalePxPerIn, 0, 0);
+  const tireScale = tireScaleFactor(fitted, proposed);
+
+  // Where the scaled photo's rim lip lands inside the tire layer. Anything
+  // between the new wheel's edge and this radius is wrong-scale wheel pixels
+  // and must be patched; at or under the new wheel's edge it is covered.
+  const ghostRadiusPx = fittedLayout.rimLipRadiusPx * tireScale;
+  const needsPatch = ghostRadiusPx > layout.rimLipRadiusPx + 0.5;
+
+  return {
+    coverRadiusPx: Math.max(fittedLayout.tireRadiusPx, layout.tireRadiusPx) + 1,
+    tire: { scale: tireScale, clipRadiusPx: layout.tireRadiusPx },
+    innerPatch: needsPatch
+      ? {
+          innerRadiusPx: layout.rimLipRadiusPx,
+          // Slight overlap past the ghost so no seam shows at the boundary.
+          outerRadiusPx: Math.min(ghostRadiusPx + 1, layout.tireRadiusPx),
+        }
+      : null,
+    wheel: { scale: rimScaleFactor(fitted, proposed), clipRadiusPx: layout.rimLipRadiusPx },
+  };
+}
+
+/**
  * Does the proposed tire cover every pixel the fitted one occupied?
  *
  * When it does, the compositor can simply draw over the original and no fill is
