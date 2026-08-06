@@ -192,6 +192,7 @@ export default function CalibrateScreen({
             onLayout={onFrameLayout}
             style={styles.frame}
             testID="calibrate-frame"
+            accessibilityLabel="Car photo. Tap the centre of a wheel, then the outer edge of its tire, to set the scale."
           >
             <Image
               source={{ uri: photo.uri }}

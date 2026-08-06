@@ -83,6 +83,8 @@ export default function TireSizeInput({
             <Pressable
               key={s}
               onPress={() => onChangeText(s)}
+              accessibilityRole="button"
+              accessibilityLabel={`Try size ${s}`}
               style={({ pressed }) => [styles.chip, pressed && { opacity: 0.6 }]}
             >
               <Text style={styles.chipText}>{s}</Text>

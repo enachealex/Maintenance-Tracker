@@ -32,6 +32,7 @@ import { colors } from './src/theme';
 import { isTabRoot, Nav, parentOf, TabKey, tabOf } from './src/shell/nav';
 import TabBar from './src/shell/TabBar';
 import HomeHub from './src/shell/HomeHub';
+import FeatureBoundary from './src/shell/FeatureBoundary';
 import MaintenanceTab from './src/features/maintenance/MaintenanceTab';
 import WheelsTab from './src/features/wheels/WheelsTab';
 import { addBuild, removeBuild, setPhoto, setPlacardSize } from './src/features/wheels/logic';
@@ -270,6 +271,7 @@ export default function App() {
       break;
     case 'wheels':
       screen = (
+        <FeatureBoundary name="Wheels">
         <WheelsTab
           vehicles={data.vehicles}
           selectedId={nav.vehicleId}
@@ -286,6 +288,7 @@ export default function App() {
             )
           }
         />
+        </FeatureBoundary>
       );
       break;
     case 'add-vehicle':

@@ -268,6 +268,8 @@ export default function WheelsTab({
                 <Card key={b.id} style={styles.buildCard}>
                   <Pressable
                     onPress={() => setProposed(b.tireSize)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Preview saved build ${b.name}`}
                     style={({ pressed }) => [styles.buildMain, pressed && { opacity: 0.6 }]}
                   >
                     <Text style={styles.buildName}>{b.name}</Text>
@@ -299,6 +301,11 @@ export default function WheelsTab({
 
           <Text style={styles.fittedNote}>
             Calibrated against {wheels.photo!.fittedTireSize}, the size fitted in your photo.
+          </Text>
+          <Text style={styles.disclaimer}>
+            Size guidance here is advisory, not a guarantee of fitment or safety. Before
+            buying, confirm load rating, clearance, and fit for your exact vehicle with a
+            professional installer.
           </Text>
           <Button title="Redo photo or scale" variant="ghost" onPress={() => setCalibrating(true)} />
         </>
@@ -345,4 +352,12 @@ const styles = StyleSheet.create({
   buildMain: {},
   buildName: { color: colors.text, fontSize: 15, fontWeight: '800' },
   buildMeta: { color: colors.textDim, fontSize: 13, marginTop: 2 },
+  disclaimer: {
+    color: colors.textDim,
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+    opacity: 0.85,
+  },
 });

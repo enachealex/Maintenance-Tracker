@@ -30,7 +30,14 @@
           "backgroundColor": "#0F1420"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lets you pick a photo of your car to preview tire sizes on it. Photos never leave your device.",
+          "cameraPermission": "Lets you photograph your car to preview tire sizes on it. Photos never leave your device."
+        }
+      ]
     ]
   }
 }
