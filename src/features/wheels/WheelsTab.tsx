@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Button, Card, Screen } from '../../components/ui';
 import { colors, spacing } from '../../theme';
 import { VehicleRecord, VehiclePhoto } from '../../core/types';
@@ -7,6 +7,8 @@ import VehicleList, { VehicleCard } from '../../shell/VehicleList';
 import { vehicleName } from '../maintenance/logic';
 import { compareFitment, parseTireSize, worstLevel } from '../../core/fitment';
 import { canVisualize, fittedSizeOf, suggestedSizes, wheelsOf } from './logic';
+import { shopLinksFor } from './shop';
+import { shareBuild } from './shareBuild';
 import TireSizeInput from './TireSizeInput';
 import WheelPreview, { PreviewDisclaimer } from './WheelPreview';
 import CalibrateScreen from './CalibrateScreen';
@@ -27,6 +29,9 @@ export default function WheelsTab({
   onAddVehicle,
   onSetPhoto,
   onSetPlacardSize,
+  onAddBuild,
+  onRemoveBuild,
+  onTrackBuild,
 }: {
   vehicles: VehicleRecord[];
   selectedId?: string;
@@ -35,6 +40,10 @@ export default function WheelsTab({
   onAddVehicle: () => void;
   onSetPhoto: (vehicleId: string, photo: VehiclePhoto) => void;
   onSetPlacardSize: (vehicleId: string, size: string) => void;
+  onAddBuild: (vehicleId: string, tireSize: string) => void;
+  onRemoveBuild: (vehicleId: string, buildId: string) => void;
+  /** A purchased set becomes a tracked rotation item in the Maintenance tab. */
+  onTrackBuild: (vehicleId: string, tireSize: string) => void;
 }) {
   const { width: winWidth } = useWindowDimensions();
   const wide = winWidth >= 768;
@@ -42,6 +51,13 @@ export default function WheelsTab({
 
   const [calibrating, setCalibrating] = useState(false);
   const [proposed, setProposed] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const previewRef = useRef<View>(null);
+
+  const flash = (msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice(null), 2500);
+  };
 
   // The working size belongs to a vehicle, not to the tab. Without this, the
   // size being tried on one car silently carries over when switching to
@@ -49,6 +65,7 @@ export default function WheelsTab({
   useEffect(() => {
     setProposed('');
     setCalibrating(false);
+    setNotice(null);
   }, [selectedId]);
 
   if (!selected) {
@@ -144,11 +161,13 @@ export default function WheelsTab({
       ) : (
         <>
           <View style={styles.previewBlock}>
-            <WheelPreview
-              photo={wheels.photo!}
-              proposedSize={proposedSize ? proposed : null}
-              width={previewWidth}
-            />
+            <View ref={previewRef} collapsable={false} style={styles.centerRow}>
+              <WheelPreview
+                photo={wheels.photo!}
+                proposedSize={proposedSize ? proposed : null}
+                width={previewWidth}
+              />
+            </View>
             <PreviewDisclaimer />
           </View>
 
@@ -193,6 +212,91 @@ export default function WheelsTab({
             </Card>
           )}
 
+          {proposedSize && (
+            <View style={styles.actionRow}>
+              <View style={styles.action}>
+                <Button
+                  title="💾 Save build"
+                  variant="ghost"
+                  onPress={() => {
+                    onAddBuild(selected.id, proposed);
+                    flash('Saved to your builds.');
+                  }}
+                />
+              </View>
+              <View style={styles.action}>
+                <Button
+                  title="📤 Share"
+                  variant="ghost"
+                  onPress={async () => {
+                    const result = await shareBuild(wheels.photo!, proposed, previewRef);
+                    if (result === 'downloaded') flash('Image saved — check your downloads.');
+                    else if (result === 'failed') flash("Couldn't share the image.");
+                  }}
+                />
+              </View>
+            </View>
+          )}
+
+          {notice && <Text style={styles.notice}>{notice}</Text>}
+
+          {proposedSize && shopLinksFor(proposed).length > 0 && (
+            <View style={styles.shopBlock}>
+              <Text style={styles.sectionTitle}>Shop this size</Text>
+              <View style={styles.actionRow}>
+                {shopLinksFor(proposed).map((link) => (
+                  <View key={link.retailer} style={styles.action}>
+                    <Button
+                      title={link.retailer}
+                      variant="ghost"
+                      onPress={() => Linking.openURL(link.url).catch(() => {})}
+                    />
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.shopHint}>
+                Opens the retailer's search for {proposed}. Nothing about you is sent — the
+                link only carries the size.
+              </Text>
+            </View>
+          )}
+
+          {wheels.builds.length > 0 && (
+            <View style={styles.buildsBlock}>
+              <Text style={styles.sectionTitle}>Saved builds</Text>
+              {wheels.builds.map((b) => (
+                <Card key={b.id} style={styles.buildCard}>
+                  <Pressable
+                    onPress={() => setProposed(b.tireSize)}
+                    style={({ pressed }) => [styles.buildMain, pressed && { opacity: 0.6 }]}
+                  >
+                    <Text style={styles.buildName}>{b.name}</Text>
+                    <Text style={styles.buildMeta}>Tap to preview {b.tireSize}</Text>
+                  </Pressable>
+                  <View style={styles.actionRow}>
+                    <View style={styles.action}>
+                      <Button
+                        title="🔧 Track rotations"
+                        variant="ghost"
+                        onPress={() => {
+                          onTrackBuild(selected.id, b.tireSize);
+                          flash('Added to Maintenance — rotations every 5,000 mi.');
+                        }}
+                      />
+                    </View>
+                    <View style={styles.action}>
+                      <Button
+                        title="Remove"
+                        variant="ghost"
+                        onPress={() => onRemoveBuild(selected.id, b.id)}
+                      />
+                    </View>
+                  </View>
+                </Card>
+              ))}
+            </View>
+          )}
+
           <Text style={styles.fittedNote}>
             Calibrated against {wheels.photo!.fittedTireSize}, the size fitted in your photo.
           </Text>
@@ -230,4 +334,15 @@ const styles = StyleSheet.create({
   warning: { color: colors.warn, fontSize: 13, lineHeight: 18, marginTop: spacing.xs },
   clean: { color: colors.ok, fontSize: 13, marginTop: spacing.xs },
   fittedNote: { color: colors.textDim, fontSize: 12, textAlign: 'center', marginBottom: spacing.sm },
+  actionRow: { flexDirection: 'row', gap: spacing.sm },
+  action: { flex: 1 },
+  notice: { color: colors.ok, fontSize: 13, textAlign: 'center', marginTop: spacing.xs },
+  sectionTitle: { color: colors.text, fontSize: 16, fontWeight: '800', marginBottom: spacing.sm },
+  shopBlock: { marginTop: spacing.lg },
+  shopHint: { color: colors.textDim, fontSize: 12, marginTop: spacing.xs, lineHeight: 17 },
+  buildsBlock: { marginTop: spacing.lg, marginBottom: spacing.sm },
+  buildCard: { gap: spacing.sm },
+  buildMain: {},
+  buildName: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  buildMeta: { color: colors.textDim, fontSize: 13, marginTop: 2 },
 });

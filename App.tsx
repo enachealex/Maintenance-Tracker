@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AppData, MileageCadence, Vehicle, VehicleRecord } from './src/core/types';
 import {
@@ -34,7 +34,7 @@ import TabBar from './src/shell/TabBar';
 import HomeHub from './src/shell/HomeHub';
 import MaintenanceTab from './src/features/maintenance/MaintenanceTab';
 import WheelsTab from './src/features/wheels/WheelsTab';
-import { setPhoto, setPlacardSize } from './src/features/wheels/logic';
+import { addBuild, removeBuild, setPhoto, setPlacardSize } from './src/features/wheels/logic';
 import VehicleSetup from './src/features/maintenance/VehicleSetup';
 import MileageSetup, { MileageSetupResult } from './src/features/maintenance/MileageSetup';
 import Dashboard from './src/features/maintenance/Dashboard';
@@ -153,14 +153,14 @@ export default function App() {
     if (dataRef.current) exportBackup(dataRef.current);
   }, []);
 
-  // Web only (pickBackupFile resolves null elsewhere), so window.confirm/alert
-  // — the same pattern Dashboard uses for its confirmations — are safe here.
   const handleImportBackup = useCallback(async () => {
     const raw = await pickBackupFile();
     if (raw == null) return;
     const imported = parseBackup(raw);
+    const notify = (msg: string) =>
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Import backup', msg);
     if (!imported) {
-      window.alert("That file doesn't look like a Maintenance Tracker backup.");
+      notify("That file doesn't look like a Maintenance Tracker backup.");
       return;
     }
     const current = dataRef.current;
@@ -171,10 +171,19 @@ export default function App() {
             current.vehicles.length > 1 ? 's' : ''
           } currently in your garage.`
         : '';
-    if (!window.confirm(`Restore ${n} vehicle${n === 1 ? '' : 's'} from this backup?${replaceNote}`))
-      return;
-    commit(imported);
-    setNav({ screen: 'home' });
+    const message = `Restore ${n} vehicle${n === 1 ? '' : 's'} from this backup?${replaceNote}`;
+    const apply = () => {
+      commit(imported);
+      setNav({ screen: 'home' });
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) apply();
+    } else {
+      Alert.alert('Import backup', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Restore', style: 'destructive', onPress: apply },
+      ]);
+    }
   }, [commit]);
 
   const updateVehicle = useCallback(
@@ -269,6 +278,13 @@ export default function App() {
           onAddVehicle={() => go({ screen: 'add-vehicle', from: 'wheels' })}
           onSetPhoto={(id, photo) => updateVehicle(id, (r) => setPhoto(r, photo))}
           onSetPlacardSize={(id, size) => updateVehicle(id, (r) => setPlacardSize(r, size))}
+          onAddBuild={(id, size) => updateVehicle(id, (r) => addBuild(r, size))}
+          onRemoveBuild={(id, buildId) => updateVehicle(id, (r) => removeBuild(r, buildId))}
+          onTrackBuild={(id, size) =>
+            updateVehicle(id, (r) =>
+              addCustomItem(r, { name: `Tires ${size} — rotation`, intervalMiles: 5000, milesAgo: 0 }),
+            )
+          }
         />
       );
       break;
