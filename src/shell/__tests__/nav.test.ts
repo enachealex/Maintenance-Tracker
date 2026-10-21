@@ -57,6 +57,10 @@ describe('parentOf', () => {
     expect(parentOf({ screen: 'home' })).toEqual({ screen: 'home' });
   });
 
+  it('backs a selected Tires vehicle out to the picker, not home', () => {
+    expect(parentOf({ screen: 'wheels', vehicleId: 'v1' })).toEqual({ screen: 'wheels' });
+  });
+
   it('never returns a screen deeper than the one it was given', () => {
     const pushed: Nav[] = [
       { screen: 'add-vehicle', from: 'home' },

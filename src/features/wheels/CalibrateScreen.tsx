@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   GestureResponderEvent,
@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import { Button, Card, Screen } from '../../components/ui';
 import { colors, spacing } from '../../theme';
-import { geometryOf, parseTireSize, pixelsPerInch } from '../../core/fitment';
+import { detectWheels, geometryOf, parseTireSize, pixelsPerInch } from '../../core/fitment';
 import { VehiclePhoto, WheelCalibration } from '../../core/types';
 import TireSizeInput from './TireSizeInput';
+import { readImagePixels } from './pixels';
 
 interface PickedPhoto {
   uri: string;
@@ -22,6 +23,9 @@ interface PickedPhoto {
 }
 
 type Point = { x: number; y: number };
+
+/** A detected wheel, in the source image's natural pixel space. */
+type AutoCircle = { x: number; y: number; r: number };
 
 /**
  * Photo capture and calibration.
@@ -52,9 +56,49 @@ export default function CalibrateScreen({
   const [active, setActive] = useState<'center' | 'edge'>('center');
   const [displayWidth, setDisplayWidth] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [autoCircle, setAutoCircle] = useState<AutoCircle | null>(null);
+  const [autoDetected, setAutoDetected] = useState(false);
   const frameRef = useRef<View>(null);
 
   const size = parseTireSize(fittedSize);
+
+  /** Look for a wheel so most users never place the circle by hand. */
+  const autoDetect = async (uri: string) => {
+    setDetecting(true);
+    setAutoCircle(null);
+    setAutoDetected(false);
+    try {
+      const pixels = await readImagePixels(uri, 480);
+      const hit = pixels ? detectWheels(pixels)[0] : undefined;
+      if (pixels && hit) {
+        const k = pixels.naturalWidth / pixels.width;
+        setAutoCircle({ x: hit.x * k, y: hit.y * k, r: hit.r * k });
+        // The natural size is authoritative; pickers sometimes omit theirs.
+        setPhoto((p) =>
+          p && p.uri === uri && !(p.width > 0)
+            ? { ...p, width: pixels.naturalWidth, height: pixels.naturalHeight }
+            : p,
+        );
+      }
+    } catch {
+      // Detection is best-effort; the two-tap flow needs nothing from it.
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  // Place the detected circle once the frame has laid out — detection works
+  // in image pixels, the markers live in display pixels.
+  useEffect(() => {
+    if (!autoCircle || !photo || center || displayWidth <= 0 || !(photo.width > 0)) return;
+    const k = displayWidth / photo.width;
+    setCenter({ x: autoCircle.x * k, y: autoCircle.y * k });
+    setEdge({ x: (autoCircle.x + autoCircle.r) * k, y: autoCircle.y * k });
+    setActive('center');
+    setAutoDetected(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCircle, displayWidth, photo?.width]);
 
   const pick = async (fromCamera: boolean) => {
     setError(null);
@@ -78,6 +122,7 @@ export default function CalibrateScreen({
       setPhoto({ uri: asset.uri, width: asset.width ?? 0, height: asset.height ?? 0 });
       setCenter(null);
       setEdge(null);
+      autoDetect(asset.uri);
     } catch {
       setError("Couldn't open the picker. Try again.");
     }
@@ -99,6 +144,10 @@ export default function CalibrateScreen({
     if (pageX == null || pageY == null || !Number.isFinite(pageX + pageY)) return;
     frameRef.current?.measureInWindow((fx, fy) => {
       const p = { x: pageX - fx, y: pageY - fy };
+      // The first tap overrides an auto-detected circle by design — a human
+      // correcting the machine must always win.
+      setAutoDetected(false);
+      setAutoCircle(null);
       if (!center || edge) {
         setCenter(p);
         setEdge(null);
@@ -171,18 +220,26 @@ export default function CalibrateScreen({
         <>
           <Card style={styles.stepCard}>
             <Text style={styles.stepTitle}>
-              {!center
-                ? 'Step 1 — tap the centre of a wheel'
-                : !edge
-                  ? 'Step 2 — tap the outer edge of the tire'
-                  : 'Circle set — fine-tune below, or tap the photo to start over'}
+              {detecting && !center
+                ? 'Looking for the wheels…'
+                : !center
+                  ? 'Step 1 — tap the centre of a wheel'
+                  : !edge
+                    ? 'Step 2 — tap the outer edge of the tire'
+                    : autoDetected
+                      ? 'Found a wheel automatically'
+                      : 'Circle set — fine-tune below, or tap the photo to start over'}
             </Text>
             <Text style={styles.stepBody}>
-              {!center
-                ? 'Pick one wheel and tap its middle, on the hub.'
-                : !edge
-                  ? 'Tap where the tread meets the road or the fender — the outside of the rubber, not the metal.'
-                  : 'The arrows move the selected point a couple of pixels at a time.'}
+              {detecting && !center
+                ? 'Checking the photo for a wheel to measure — or tap one to place the circle yourself.'
+                : !center
+                  ? 'Pick one wheel and tap its middle, on the hub.'
+                  : !edge
+                    ? 'Tap where the tread meets the road or the fender — the outside of the rubber, not the metal.'
+                    : autoDetected
+                      ? 'Check the circle hugs the tire. Fine-tune below, or tap the photo to redo it by hand.'
+                      : 'The arrows move the selected point a couple of pixels at a time.'}
             </Text>
           </Card>
 
@@ -267,7 +324,17 @@ export default function CalibrateScreen({
           />
 
           {center && edge && (
-            <Button title="Redo the circle" variant="ghost" onPress={() => { setCenter(null); setEdge(null); setActive('center'); }} />
+            <Button
+              title="Redo the circle"
+              variant="ghost"
+              onPress={() => {
+                setCenter(null);
+                setEdge(null);
+                setActive('center');
+                setAutoDetected(false);
+                setAutoCircle(null);
+              }}
+            />
           )}
         </>
       )}

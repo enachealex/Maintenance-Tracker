@@ -32,3 +32,5 @@ export {
 export type { WheelLayout, CalibrationReference, CompositeLayers } from './render';
 export { compareFitment, worstLevel, THRESHOLDS } from './compare';
 export type { CompareInput } from './compare';
+export { detectWheels, refineCircle, circleScore, extractTireSizeFromText } from './detect';
+export type { DetectedCircle, ImageDataLike } from './detect';

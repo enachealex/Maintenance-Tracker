@@ -19,10 +19,10 @@ export type Nav =
 export const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'home', label: 'Home', icon: '🏠' },
   { key: 'maintenance', label: 'Maintenance', icon: '🔧' },
-  { key: 'wheels', label: 'Wheels', icon: '🛞' },
+  { key: 'wheels', label: 'Tires', icon: '🛞' },
 ];
 
-/** Tab roots show the tab bar; everything else is a full-screen push. */
+/** The three base screens; everything else is a push on top of one of them. */
 export function isTabRoot(n: Nav): boolean {
   return n.screen === 'home' || n.screen === 'maintenance' || n.screen === 'wheels';
 }
@@ -46,6 +46,8 @@ export function tabOf(n: Nav): TabKey {
  */
 export function parentOf(n: Nav): Nav {
   if (n.screen === 'add-mileage') return { screen: 'add-vehicle', from: n.from };
+  // A selected vehicle inside Wheels backs out to the Wheels picker, not home.
+  if (n.screen === 'wheels' && n.vehicleId) return { screen: 'wheels' };
   if (isTabRoot(n)) return { screen: 'home' };
   const tab = tabOf(n);
   return tab === 'maintenance'

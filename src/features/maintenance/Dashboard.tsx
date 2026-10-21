@@ -10,13 +10,15 @@ import {
   vehicleName,
 } from './logic';
 import { CADENCE_OPTIONS, daysSinceMileageUpdate, isMileageStale } from './cadence';
-import { Button, Card, Field, Screen, SelectField } from '../../components/ui';
+import { Button, Card, CollapsibleCard, Field, Screen, SelectField } from '../../components/ui';
 import { colors, spacing } from '../../theme';
 import { ComputedTask, MileageCadence, OilType, VehicleRecord } from '../../core/types';
 
 const OIL_TYPE_KEYS: OilType[] = ['synthetic-blend', 'full-synthetic'];
 const oilTypeLabel = (t: OilType) =>
   `${OIL_TYPES[t].label} — every ${OIL_TYPES[t].intervalMiles.toLocaleString()} mi`;
+
+type OilControl = { value: OilType; onChange: (t: OilType) => void };
 
 export default function Dashboard({
   rec,
@@ -135,6 +137,11 @@ export default function Dashboard({
       true,
     );
 
+  // Oil type lives on the oil-change item itself: it's the one setting that
+  // belongs to a single task, not the vehicle-wide chrome above.
+  const oilControlFor = (task: ComputedTask): OilControl | undefined =>
+    task.item.id === 'oil-change' ? { value: oilTypeOf(rec), onChange: onSetOilType } : undefined;
+
   return (
     <Screen topPadding={56}>
       <Pressable
@@ -200,8 +207,10 @@ export default function Dashboard({
         </Text>
       )}
 
-      <Card>
-        <Text style={styles.cadenceLabel}>🔔 Reminder frequency</Text>
+      <CollapsibleCard
+        title="🔔 Reminder frequency"
+        summary={`Mileage: ${displayCadence(rec.mileageCadence, rec.mileageCustomDays)} · Maintenance: ${displayCadence(rec.maintenanceCadence ?? 'weekly', rec.maintenanceCustomDays ?? 7)}`}
+      >
         <SelectField
           label="Remind me to update mileage"
           value={displayCadence(rec.mileageCadence, rec.mileageCustomDays)}
@@ -246,28 +255,9 @@ export default function Dashboard({
           You'll be reminded at most this often — mileage prompts when the reading goes stale,
           maintenance reminders while items are due. Tap a reminder to jump straight here.
         </Text>
-      </Card>
+      </CollapsibleCard>
 
-      <Card>
-        <Text style={styles.cadenceLabel}>🛢️ Engine oil</Text>
-        <SelectField
-          label="Oil type"
-          value={oilTypeLabel(oilTypeOf(rec))}
-          placeholder="Choose oil type"
-          options={OIL_TYPE_KEYS.map(oilTypeLabel)}
-          onSelect={(label) => onSetOilType(OIL_TYPE_KEYS.find((k) => oilTypeLabel(k) === label)!)}
-        />
-        <Text style={styles.cadenceHint}>
-          Sets how often the oil-change reminder comes due. Check your last oil-change sticker or
-          receipt if you're not sure which oil was used.
-        </Text>
-      </Card>
-
-      {overdue.length + dueSoon.length > 0 ? (
-        <Text style={styles.notice}>
-          🔔 You'll get a weekly reminder for each item below until you check it off.
-        </Text>
-      ) : (
+      {overdue.length + dueSoon.length === 0 && (
         <Text style={styles.notice}>✅ All caught up — nothing due right now.</Text>
       )}
 
@@ -278,6 +268,7 @@ export default function Dashboard({
             task={t}
             onComplete={() => confirmComplete(t)}
             onEditLastDone={(m) => editLastDone(t.item.id, m)}
+            oilControl={oilControlFor(t)}
             onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
           />
         ))}
@@ -290,6 +281,7 @@ export default function Dashboard({
             task={t}
             onComplete={() => confirmComplete(t)}
             onEditLastDone={(m) => editLastDone(t.item.id, m)}
+            oilControl={oilControlFor(t)}
             onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
           />
         ))}
@@ -302,6 +294,7 @@ export default function Dashboard({
             task={t}
             onComplete={() => confirmComplete(t)}
             onEditLastDone={(m) => editLastDone(t.item.id, m)}
+            oilControl={oilControlFor(t)}
             onRemove={isCustomItem(t.item.id) ? () => confirmRemoveCustom(t) : undefined}
           />
         ))}
@@ -400,16 +393,19 @@ function TaskRow({
   onComplete,
   onEditLastDone,
   onRemove,
+  oilControl,
 }: {
   task: ComputedTask;
   onComplete: () => void;
   onEditLastDone: (mileage: number | null) => void;
   onRemove?: () => void;
+  oilControl?: OilControl;
 }) {
   const { item, status, state } = task;
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [choosingOil, setChoosingOil] = useState(false);
   const badge =
     status === 'overdue'
       ? { color: colors.danger, bg: colors.dangerSoft }
@@ -472,6 +468,43 @@ function TaskRow({
           </Pressable>
         )}
       </View>
+      {oilControl && (
+        <View style={styles.oilBox}>
+          <View style={styles.oilRow}>
+            <Text style={styles.oilCurrent}>🛢️ {OIL_TYPES[oilControl.value].label}</Text>
+            <Pressable onPress={() => setChoosingOil((c) => !c)} hitSlop={6}>
+              <Text style={styles.oilChange}>{choosingOil ? 'Close' : 'Change'}</Text>
+            </Pressable>
+          </View>
+          {choosingOil && (
+            <>
+              {OIL_TYPE_KEYS.map((k) => (
+                <Pressable
+                  key={k}
+                  onPress={() => {
+                    oilControl.onChange(k);
+                    setChoosingOil(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.oilOption,
+                    k === oilControl.value && styles.oilOptionActive,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.oilOptionText}>
+                    {k === oilControl.value ? '✓ ' : ''}
+                    {oilTypeLabel(k)}
+                  </Text>
+                </Pressable>
+              ))}
+              <Text style={styles.oilHint}>
+                Sets how often this reminder comes due. Check your last oil-change sticker or
+                receipt if you're not sure which oil was used.
+              </Text>
+            </>
+          )}
+        </View>
+      )}
       {showHistory && history.length > 0 && (
         <View style={styles.historyBox}>
           {history.map((h, i) => (
@@ -554,6 +587,26 @@ const styles = StyleSheet.create({
     borderTopColor: colors.cardBorder,
   },
   historyLink: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
+  oilBox: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+  },
+  oilRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  oilCurrent: { color: colors.textDim, fontSize: 13 },
+  oilChange: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  oilOption: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
+  oilOptionActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  oilOptionText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  oilHint: { color: colors.textDim, fontSize: 12, marginTop: spacing.sm },
   historyBox: {
     marginTop: spacing.sm,
     paddingTop: spacing.sm,

@@ -1,6 +1,6 @@
 import { genId } from '../../core/storage';
 import { VehicleRecord, WheelBuild, WheelSetup, VehiclePhoto } from '../../core/types';
-import { parseTireSize } from '../../core/fitment';
+import { geometryOf, parseTireSize } from '../../core/fitment';
 
 /**
  * Wheels-tab state transitions.
@@ -51,6 +51,38 @@ export function addBuild(rec: VehicleRecord, tireSize: string, name?: string): V
 export function removeBuild(rec: VehicleRecord, buildId: string): VehicleRecord {
   const w = wheelsOf(rec);
   return { ...rec, wheels: { ...w, builds: w.builds.filter((b) => b.id !== buildId) } };
+}
+
+/**
+ * Correct the size recorded as fitted in the photo. The traced circle in
+ * the photo is a fixed physical measurement; only its interpretation changes,
+ * so pixelsPerInch rescales by the ratio of the old size's overall diameter
+ * to the new size's overall diameter. Without a photo this just records the
+ * placard.
+ */
+export function setFittedSize(rec: VehicleRecord, size: string): VehicleRecord {
+  const trimmed = size.trim();
+  const w = wheelsOf(rec);
+  if (!w.photo) return setPlacardSize(rec, trimmed);
+
+  const cal = w.photo.calibration;
+  const oldParsed = parseTireSize(w.photo.fittedTireSize);
+  const newParsed = parseTireSize(trimmed);
+  // Mid-edit or unreadable text keeps the current scale; the circle's pixel
+  // radius only re-reads once both sizes are known quantities.
+  const nextCal =
+    oldParsed && newParsed
+      ? {
+          ...cal,
+          pixelsPerInch:
+            (cal.pixelsPerInch * geometryOf(oldParsed).overallDiameterIn) /
+            geometryOf(newParsed).overallDiameterIn,
+        }
+      : cal;
+  return {
+    ...rec,
+    wheels: { ...w, photo: { ...w.photo, fittedTireSize: trimmed, calibration: nextCal } },
+  };
 }
 
 /** True when there is enough to render: a calibrated photo and a fitted size. */

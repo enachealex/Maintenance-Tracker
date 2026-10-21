@@ -1,6 +1,7 @@
 import {
   addBuild,
   stepTireSize,
+  setFittedSize,
   canVisualize,
   clearPhoto,
   fittedSizeOf,
@@ -202,5 +203,41 @@ describe('stepTireSize', () => {
   it('round-trips through the parser', () => {
     const out = stepTireSize('265/35R19', 'aspect', 1)!;
     expect(out).toBe('265/40R19');
+  });
+});
+
+describe('setFittedSize', () => {
+  const photo: VehiclePhoto = {
+    uri: 'file:///photo.jpg',
+    calibration: { pixelsPerInch: 10, centerX: 100, centerY: 100, imageWidth: 1000, imageHeight: 600 },
+    fittedTireSize: '225/45R17',
+    createdAt: '2025-01-01T00:00:00.000Z',
+  };
+
+  it('records the placard when there is no photo', () => {
+    const rec = setFittedSize(base, '235/40R18');
+    expect(wheelsOf(rec).placardTireSize).toBe('235/40R18');
+    expect(wheelsOf(rec).photo).toBeUndefined();
+  });
+
+  it('rescales pixelsPerInch by the ratio of overall diameters', () => {
+    const withPhoto = setPhoto(base, photo);
+    const rec = setFittedSize(withPhoto, '225/45R18');
+    const next = wheelsOf(rec).photo!;
+    expect(next.fittedTireSize).toBe('225/45R18');
+    // Same traced circle, one inch more overall diameter -> fewer px per inch.
+    const oldOverall = 17 + (2 * 225 * 0.45) / 25.4;
+    const newOverall = 18 + (2 * 225 * 0.45) / 25.4;
+    expect(next.calibration.pixelsPerInch).toBeCloseTo((10 * oldOverall) / newOverall, 6);
+    // The traced circle's pixel radius is unchanged by the relabel.
+    expect(next.calibration.pixelsPerInch * newOverall).toBeCloseTo(10 * oldOverall, 6);
+  });
+
+  it('keeps the scale while the new size is unreadable mid-edit', () => {
+    const withPhoto = setPhoto(base, photo);
+    const rec = setFittedSize(withPhoto, '225/4');
+    const next = wheelsOf(rec).photo!;
+    expect(next.fittedTireSize).toBe('225/4');
+    expect(next.calibration.pixelsPerInch).toBe(10);
   });
 });

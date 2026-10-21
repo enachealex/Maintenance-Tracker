@@ -29,13 +29,13 @@ import {
 } from './src/webNotifications';
 import { setupWebViewport } from './src/webViewport';
 import { colors } from './src/theme';
-import { isTabRoot, Nav, parentOf, TabKey, tabOf } from './src/shell/nav';
+import { Nav, parentOf, TabKey, tabOf } from './src/shell/nav';
 import TabBar from './src/shell/TabBar';
 import HomeHub from './src/shell/HomeHub';
 import FeatureBoundary from './src/shell/FeatureBoundary';
 import MaintenanceTab from './src/features/maintenance/MaintenanceTab';
 import WheelsTab from './src/features/wheels/WheelsTab';
-import { addBuild, removeBuild, setPhoto, setPlacardSize } from './src/features/wheels/logic';
+import { addBuild, removeBuild, setFittedSize, setPhoto, setPlacardSize } from './src/features/wheels/logic';
 import VehicleSetup from './src/features/maintenance/VehicleSetup';
 import MileageSetup, { MileageSetupResult } from './src/features/maintenance/MileageSetup';
 import Dashboard from './src/features/maintenance/Dashboard';
@@ -242,7 +242,7 @@ export default function App() {
   const homeHub = (
     <HomeHub
       vehicles={data.vehicles}
-      onOpenMaintenance={(id) => go({ screen: 'vehicle', id, from: 'home' })}
+      onOpenMaintenance={(id) => go({ screen: 'vehicle', id, from: 'maintenance' })}
       onOpenWheels={(id) => go({ screen: 'wheels', vehicleId: id })}
       onAddVehicle={() => go({ screen: 'add-vehicle', from: 'home' })}
       onNotificationsEnabled={handleNotificationsEnabled}
@@ -271,15 +271,16 @@ export default function App() {
       break;
     case 'wheels':
       screen = (
-        <FeatureBoundary name="Wheels">
+        <FeatureBoundary name="Tires">
         <WheelsTab
           vehicles={data.vehicles}
           selectedId={nav.vehicleId}
           onSelectVehicle={(id) => go({ screen: 'wheels', vehicleId: id })}
-          onClearSelection={() => go({ screen: 'wheels' })}
+          onBack={goBack}
           onAddVehicle={() => go({ screen: 'add-vehicle', from: 'wheels' })}
           onSetPhoto={(id, photo) => updateVehicle(id, (r) => setPhoto(r, photo))}
           onSetPlacardSize={(id, size) => updateVehicle(id, (r) => setPlacardSize(r, size))}
+          onSetFittedSize={(id, size) => updateVehicle(id, (r) => setFittedSize(r, size))}
           onAddBuild={(id, size) => updateVehicle(id, (r) => addBuild(r, size))}
           onRemoveBuild={(id, buildId) => updateVehicle(id, (r) => removeBuild(r, buildId))}
           onTrackBuild={(id, size) =>
@@ -356,9 +357,11 @@ export default function App() {
   return (
     <View style={styles.container}>
       {/* The tab bar sits below the screen in normal flow, so scrolling
-          content is never hidden behind it. */}
+          content is never hidden behind it. It stays visible on every screen,
+          including pushed ones — tapping a tab from anywhere lands on that
+          tab's root. */}
       <View style={styles.body}>{screen}</View>
-      {isTabRoot(nav) && <TabBar active={tabOf(nav)} onSelect={goToTab} />}
+      <TabBar active={tabOf(nav)} onSelect={goToTab} />
       <StatusBar style="light" />
     </View>
   );

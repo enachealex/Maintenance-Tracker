@@ -39,11 +39,13 @@ export function Button({
   title,
   onPress,
   variant = 'primary',
+  size = 'regular',
   disabled,
 }: {
   title: string;
   onPress: () => void;
   variant?: 'primary' | 'ghost' | 'danger';
+  size?: 'regular' | 'compact';
   disabled?: boolean;
 }) {
   return (
@@ -54,6 +56,7 @@ export function Button({
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.button,
+        size === 'compact' && styles.buttonCompact,
         variant === 'primary' && { backgroundColor: colors.accent },
         variant === 'ghost' && {
           backgroundColor: 'transparent',
@@ -67,6 +70,7 @@ export function Button({
       <Text
         style={[
           styles.buttonText,
+          size === 'compact' && styles.buttonTextCompact,
           variant === 'ghost' && { color: colors.textDim },
           variant === 'danger' && { color: colors.danger },
         ]}
@@ -79,6 +83,39 @@ export function Button({
 
 export function Card({ children, style }: { children: React.ReactNode; style?: any }) {
   return <View style={[styles.card, style]}>{children}</View>;
+}
+
+/**
+ * A card that shows only its title and a one-line summary until tapped —
+ * settings live behind it without eating page real estate.
+ */
+export function CollapsibleCard({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.card}>
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={({ pressed }) => [styles.collapseHeader, pressed && { opacity: 0.7 }]}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.collapseTitle}>{title}</Text>
+          {!open && <Text style={styles.collapseSummary}>{summary}</Text>}
+        </View>
+        <Text style={styles.collapseChevron}>{open ? '▴' : '▾'}</Text>
+      </Pressable>
+      {open && <View style={styles.collapseBody}>{children}</View>}
+    </View>
+  );
 }
 
 /**
@@ -300,7 +337,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
   },
+  buttonCompact: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  buttonTextCompact: { fontSize: 14 },
+  collapseHeader: { flexDirection: 'row', alignItems: 'center' },
+  collapseTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  collapseSummary: { color: colors.textDim, fontSize: 13, marginTop: 2 },
+  collapseChevron: { color: colors.textDim, fontSize: 14, marginLeft: spacing.sm },
+  collapseBody: { marginTop: spacing.md },
   card: {
     backgroundColor: colors.card,
     borderRadius: 16,

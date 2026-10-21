@@ -1,9 +1,9 @@
-import React from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Button, Screen } from '../components/ui';
 import NotificationPrompt from '../components/NotificationPrompt';
 import { colors, spacing } from '../theme';
-import { dueCount } from '../features/maintenance/logic';
+import { dueCount, vehicleName } from '../features/maintenance/logic';
 import { VehicleRecord } from '../core/types';
 import VehicleList from './VehicleList';
 
@@ -34,13 +34,25 @@ export default function HomeHub({
 }) {
   const totalDue = vehicles.reduce((sum, v) => sum + dueCount(v), 0);
   const wide = useWindowDimensions().width >= 768;
+  // Tapping a vehicle asks which feature to open for it, rather than
+  // silently picking one.
+  const [choosingFor, setChoosingFor] = useState<VehicleRecord | null>(null);
+
+  const choose = (open: (id: string) => void) => {
+    const id = choosingFor!.id;
+    setChoosingFor(null);
+    open(id);
+  };
 
   return (
     <Screen>
-      <Text style={[styles.h1, wide && styles.centered]}>🚗 My Garage</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.h1}>🚗 My Garage</Text>
+        <Button title="＋ Add" size="compact" onPress={onAddVehicle} />
+      </View>
       <Text style={[styles.sub, wide && styles.centered]}>
         {vehicles.length === 0
-          ? 'Add your first vehicle to track maintenance and try new wheels.'
+          ? 'Add your first vehicle to track maintenance and try new tires.'
           : `${vehicles.length} vehicle${vehicles.length > 1 ? 's' : ''} · ${
               totalDue === 0
                 ? 'all caught up'
@@ -55,31 +67,47 @@ export default function HomeHub({
       <VehicleList
         vehicles={vehicles}
         emptyText="Your garage is empty."
-        onOpenVehicle={onOpenMaintenance}
-        renderActions={(rec) => (
-          <>
-            <View style={styles.action}>
-              <Button title="🔧 Maintenance" variant="ghost" onPress={() => onOpenMaintenance(rec.id)} />
-            </View>
-            <View style={styles.action}>
-              <Button title="🛞 Wheels" variant="ghost" onPress={() => onOpenWheels(rec.id)} />
-            </View>
-          </>
-        )}
+        onOpenVehicle={(id) => setChoosingFor(vehicles.find((v) => v.id === id) ?? null)}
       />
 
-      <View style={wide && styles.centerRow}>
-        <Button title="＋ Add vehicle" onPress={onAddVehicle} />
-      </View>
+      <Modal
+        visible={choosingFor != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setChoosingFor(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setChoosingFor(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>{choosingFor ? vehicleName(choosingFor) : ''}</Text>
+            <Pressable
+              onPress={() => choose(onOpenMaintenance)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.featureRow, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.featureName}>🔧 Maintenance</Text>
+              <Text style={styles.featureMeta}>Mileage, reminders & service history</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => choose(onOpenWheels)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.featureRow, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.featureName}>🛞 Tires</Text>
+              <Text style={styles.featureMeta}>Preview tire sizes on your photo</Text>
+            </Pressable>
+            <Button title="Cancel" variant="ghost" onPress={() => setChoosingFor(null)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {(vehicles.length > 0 || onImportBackup) && (
         <View style={styles.backupBlock}>
           <View style={[styles.backupRow, wide && styles.centerRow]}>
             {vehicles.length > 0 && (
-              <Button title="Export backup" variant="ghost" onPress={onExportBackup} />
+              <Button title="Export backup" variant="ghost" size="compact" onPress={onExportBackup} />
             )}
             {onImportBackup && (
-              <Button title="Import backup" variant="ghost" onPress={onImportBackup} />
+              <Button title="Import backup" variant="ghost" size="compact" onPress={onImportBackup} />
             )}
           </View>
           <Text style={styles.backupHint}>
@@ -94,11 +122,16 @@ export default function HomeHub({
 }
 
 const styles = StyleSheet.create({
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: spacing.xs },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  h1: { color: colors.text, fontSize: 28, fontWeight: '800' },
   sub: { color: colors.textDim, fontSize: 15, marginBottom: spacing.lg },
   centered: { textAlign: 'center' },
   centerRow: { alignItems: 'center' },
-  action: { flex: 1 },
   backupBlock: { marginTop: spacing.lg },
   backupRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
   backupHint: {
@@ -107,4 +140,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalSheet: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 16,
+    padding: spacing.lg,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: spacing.sm },
+  featureRow: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  featureName: { color: colors.text, fontSize: 17, fontWeight: '800' },
+  featureMeta: { color: colors.textDim, fontSize: 13, marginTop: 2 },
 });
