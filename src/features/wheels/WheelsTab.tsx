@@ -59,7 +59,7 @@ export default function WheelsTab({
   const [proposed, setProposed] = useState('');
   const [switching, setSwitching] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const previewRef = useRef<View>(null);
+  const previewRef = useRef<React.ComponentRef<typeof View>>(null);
 
   const flash = (msg: string) => {
     setNotice(msg);

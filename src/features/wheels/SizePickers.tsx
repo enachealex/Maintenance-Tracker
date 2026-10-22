@@ -86,7 +86,7 @@ function Drum({
   selected: string;
   onSelect: (v: string) => void;
 }) {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const selectedIndex = Math.max(0, options.indexOf(selected));
   // What the wheel is visually locked on — also styles the centre row while
   // a gesture is still in flight.

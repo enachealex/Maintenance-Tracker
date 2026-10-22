@@ -59,7 +59,7 @@ export default function CalibrateScreen({
   const [detecting, setDetecting] = useState(false);
   const [autoCircle, setAutoCircle] = useState<AutoCircle | null>(null);
   const [autoDetected, setAutoDetected] = useState(false);
-  const frameRef = useRef<View>(null);
+  const frameRef = useRef<React.ComponentRef<typeof View>>(null);
 
   const size = parseTireSize(fittedSize);
 
