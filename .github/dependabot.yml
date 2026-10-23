@@ -1,13 +1,37 @@
+# Keep dependencies fresh without fighting Expo's version matrix.
+#
+# Expo pins exact versions for the SDK's native modules, so major bumps to
+# those packages must come from an SDK upgrade (`npx expo install --fix`),
+# never from a lone Dependabot PR. Patches and minors are welcome, grouped
+# into one weekly PR to keep the noise down. Security updates (when GitHub
+# has a patched version to offer) are separate and always welcome.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
     groups:
-      # Expo pins exact versions of its own packages; keep them moving together.
-      expo:
-        patterns:
-          - "expo*"
-          - "@expo/*"
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "expo*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native-web"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest-expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native-community/datetimepicker"
+        update-types: ["version-update:semver-major"]
