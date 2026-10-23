@@ -1,0 +1,17 @@
+# Security headers, applied by hosts that read a _headers file at the site
+# root (Cloudflare Pages, Netlify). Harmlessly ignored elsewhere.
+#
+# CSP notes:
+#  - script-src 'self' works because the Expo web export emits no inline
+#    scripts (verify after Expo upgrades: dist/index.html).
+#  - style-src needs 'unsafe-inline': react-native-web injects its styles at
+#    runtime, and index.html ships an inline style reset.
+#  - connect-src lists the only three remote hosts the app talks to
+#    (NHTSA vPIC, EPA fueleconomy.gov, and the push worker — see
+#    src/pushConfig.ts; update here if that URL changes).
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://vpic.nhtsa.dot.gov https://www.fueleconomy.gov https://maintenance-push.enachealex1.workers.dev; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
