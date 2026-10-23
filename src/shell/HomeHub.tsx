@@ -35,12 +35,15 @@ export default function HomeHub({
   const totalDue = vehicles.reduce((sum, v) => sum + dueCount(v), 0);
   const wide = useWindowDimensions().width >= 768;
   // Tapping a vehicle asks which feature to open for it, rather than
-  // silently picking one.
-  const [choosingFor, setChoosingFor] = useState<VehicleRecord | null>(null);
+  // silently picking one. Visibility and content are separate state: the
+  // vehicle must stay rendered while the modal fades out, or the sheet
+  // shrinks and jumps mid-close.
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [chooserVehicle, setChooserVehicle] = useState<VehicleRecord | null>(null);
 
   const choose = (open: (id: string) => void) => {
-    const id = choosingFor!.id;
-    setChoosingFor(null);
+    const id = chooserVehicle!.id;
+    setChooserOpen(false);
     open(id);
   };
 
@@ -67,18 +70,24 @@ export default function HomeHub({
       <VehicleList
         vehicles={vehicles}
         emptyText="Your garage is empty."
-        onOpenVehicle={(id) => setChoosingFor(vehicles.find((v) => v.id === id) ?? null)}
+        onOpenVehicle={(id) => {
+          const rec = vehicles.find((v) => v.id === id);
+          if (rec) {
+            setChooserVehicle(rec);
+            setChooserOpen(true);
+          }
+        }}
       />
 
       <Modal
-        visible={choosingFor != null}
+        visible={chooserOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setChoosingFor(null)}
+        onRequestClose={() => setChooserOpen(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setChoosingFor(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setChooserOpen(false)}>
           <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>{choosingFor ? vehicleName(choosingFor) : ''}</Text>
+            <Text style={styles.modalTitle}>{chooserVehicle ? vehicleName(chooserVehicle) : ''}</Text>
             <Pressable
               onPress={() => choose(onOpenMaintenance)}
               accessibilityRole="button"
@@ -95,7 +104,7 @@ export default function HomeHub({
               <Text style={styles.featureName}>🛞 Tires</Text>
               <Text style={styles.featureMeta}>Preview tire sizes on your photo</Text>
             </Pressable>
-            <Button title="Cancel" variant="ghost" onPress={() => setChoosingFor(null)} />
+            <Button title="Cancel" variant="ghost" onPress={() => setChooserOpen(false)} />
           </Pressable>
         </Pressable>
       </Modal>
